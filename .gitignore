@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# bench: fichiers audio lourds, on garde le texte source et les résultats
+bench/**/*.wav
+bench/**/*.aiff
+bench/**/*.m4a
+bench/.venv/
+
+# données locales
+data/
+*.sqlite
+*.db
+
+.DS_Store
