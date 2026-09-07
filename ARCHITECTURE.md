@@ -15,8 +15,8 @@ Une PWA offline-first qui enregistre le cours depuis plusieurs téléphones, tra
 | # | Conclusion | Impact |
 |---|---|---|
 | 1 | **L'app tourne sur ton propre matériel** : une VM dédiée sur `infra-pve-2`, qui tourne déjà 24/7 pour schedual. Coût marginal en électricité ≈ 0. Exposition par un **tunnel Cloudflare dédié** — ta ligne est en CGNAT, aucun port-forwarding n'est possible. | Plus de VM louée, plus d'object storage payant, plus d'arbitrage Hetzner/Scaleway. Voir [§11](#11-coûts). |
-| 2 | **Auto-héberger l'ASR coûterait *plus cher* que de le payer.** Allumer `infra-pve-1` (24 threads libres) pour Whisper = +78 W ≈ **11,20 €/mois d'électricité**, contre **4,81 €/mois** d'ASR payant au profil par défaut — et ça annule ton optimisation en cours (éteindre pve-1). Le faire sur `infra-pve-2` mettrait Whisper en concurrence CPU avec la prod EPBI en pleine journée. | ASR chez **Groq** (`whisper-large-v3-turbo`, 0,037 €/h) : tu as tranché « le moins cher qui fait le taff », et l'UE n'est plus une contrainte. Le profil 100 % UE (OVH, 0,046 €/h) reste une ligne de config. `infra-pve-ai` ne revient pas tout de suite — l'auto-hébergement reste donc théorique. Voir [§11](#11-coûts). |
-| 3 | **À 30 h de cours par semaine — 130 h/mois — le budget de 20 € interdit que la fusion soit le défaut.** Transcrire 2 flux sur tout coûterait déjà ~9,60 €/mois rien qu'en ASR, et l'auto-hébergement ne suffit plus à absorber le doublement du volume. | **Le profil devient un choix par cours, pas un réglage global.** Par défaut 1 seul flux transcrit ; les autres sont enregistrés et gardés 7 jours, donc **une séance peut être « passée en fusion » rétroactivement en un clic**, pour 0,074 €. Voir [§11](#11-coûts). |
+| 2 | **La bonne machine pour l'IA, c'est ton MacBook, pas tes serveurs.** Un M4 fait tourner Whisper 10 à 20× plus vite que tes ProLiant de 2012 (Xeon E5, DDR3, pas de GPU), en 20 W au lieu de 78. Et il est déjà dans l'amphi : ton propre scénario, c'est téléphone sur la table + laptop pour éditer. | **Worker ASR local sur ton Mac** (ADR-15), repli payant quand il dort. La règle générale : *héberger* l'app sur une machine déjà allumée coûte quelques watts, donc rien ; *inférer* sature un CPU pendant des heures, donc c'est facturé — par EDF au lieu d'un fournisseur d'API, et à chaque mesure EDF est plus cher. |
+| 3 | **Le budget final est de ~2,80 €/mois, et la fusion redevient le comportement par défaut.** L'ASR local rend `K` gratuit, et sous Haiku 4.5 les modèles se tiennent à 22 centimes par mois d'écart — le prix cesse d'être le critère. | **Fusion à 3 flux sur toutes les heures**, résumés live, document final par **Mistral Small 4** (ADR-16). Le chiffre que tu avais validé, 7,16 €/mois, devient le **pire cas** — Mac éteint tout le mois — au lieu du cas nominal. Voir [§11](#11-coûts). |
 | 4 | **La sync temporelle décrite au §3.3 du brief (corrélation sur les 60 premières secondes) ne peut pas tenir le critère « < 200 ms après 60 min ».** Les horloges d'échantillonnage audio des téléphones dérivent de 10 à 100 ppm, soit jusqu'à **360 ms/heure** — la dérive est le terme dominant, pas l'offset initial. | Je propose un **ré-ancrage continu** (offset + pente estimés en continu sur toute la séance), pas un calage unique. Voir [§5.1](#51-synchronisation-temporelle). Sans ça, le critère d'acceptation est inatteignable. |
 | 5 | **`MediaRecorder` est un piège sur iOS** (pas d'Opus, chunks non décodables indépendamment) et **Safari suspend la capture quand l'écran se verrouille** — or le scénario nominal est « téléphone posé sur la table ». | Capture via **AudioWorklet → PCM → encodage Opus dans un Worker**, chunks autonomes ; + Wake Lock, détection de trous, test réel de 90 min en semaine 1. Voir [§4](#4--capture-audio). C'est le risque n°1 du projet. |
 | 6 | **La fusion n'apporte un gain réel qu'à partir de 3 flux.** À 2 flux, ROVER n'a pas de majorité et se réduit à « faire confiance au meilleur flux ». | Le critère « WER canonique < meilleur flux » sera prouvé sur banc synthétique à N=3..5 ; à N=2 l'objectif est le *marquage* des désaccords, pas le gain de WER. Dit franchement dans les tests. |
@@ -58,9 +58,14 @@ graph TB
         FS[("Disque local<br/>purge J+7")]
     end
 
-    subgraph Ext["Fournisseurs — derrière interfaces"]
-        ASR["ASRProvider<br/>Groq whisper-turbo"]
-        LLM["LLMProvider<br/>Claude"]
+    subgraph Mac["Mac M4 — worker opportuniste, via Tailscale"]
+        WHI["whisper.cpp Metal<br/>ASR de tous les flux"]
+        SUM["LLM local<br/>résumés live"]
+    end
+
+    subgraph Ext["Repli payant — derrière interfaces"]
+        ASRP["ASRProvider<br/>Groq whisper-turbo"]
+        LLMP["LLMProvider<br/>Mistral Small 4"]
     end
 
     UP -->|"chunk + métadonnées"| CFT
@@ -69,8 +74,12 @@ graph TB
     CFT --> RT
     API --> FS
     API --> RD --> W
-    W --> ASR
-    W --> LLM
+    RD -->|"pull si réveillé"| WHI
+    RD -->|"pull si réveillé"| SUM
+    WHI --> PG
+    SUM --> PG
+    W -->|"repli"| ASRP
+    W --> LLMP
     W --> PG
     API --> PG
     RT --> PG
@@ -124,7 +133,7 @@ Format court : décision, raison, alternative écartée. Les ADR marqués **↯*
 
 | ADR | Décision | Pourquoi |
 |---|---|---|
-| **01** | **ASR par défaut = Groq `whisper-large-v3-turbo`** (0,037 €/h), OVHcloud AI Endpoints (0,046 €/h, UE) en second, `faster-whisper` auto-hébergé en troisième. | Leo a tranché : le moins cher qui fait le travail, la localisation UE n'est pas une contrainte pour un usage privé de promo. Les 0,009 €/h d'écart pèsent 1,17 €/mois à 130 h — assez pour compter dans un budget de 20 €. L'interface `ASRProvider` rend les trois interchangeables par config, donc le profil 100 % UE reste atteignable si l'école le demandait un jour. |
+| **01** | **ASR : `whisper.cpp` local sur le Mac en premier, Groq `whisper-large-v3-turbo` en repli** (0,037 €/h), OVH (0,046 €/h, UE) en troisième. | Whisper est une commodité : le modèle local et le modèle payant sont le même modèle, l'auto-hébergement ne coûte donc rien en qualité. Voir ADR-15 pour le worker. Le repli garde le service utilisable quand le Mac dort. |
 | **02 ↯** | **Capture via AudioWorklet + encodage Opus côté client**, pas `MediaRecorder`. | Voir [§4](#4--capture-audio). `MediaRecorder` ne produit pas d'Opus sur iOS et ses chunks ne sont pas décodables indépendamment. |
 | **03 ↯** | **Ré-ancrage temporel continu** (offset + dérive) au lieu d'un calage unique sur 60 s. | La dérive d'horloge d'échantillonnage domine (jusqu'à 360 ms/h). Sans ça, critère « < 200 ms » non tenable. |
 | **04 ↯** | **VM dédiée sur `infra-pve-2`** (Proxmox de Leo), Docker Compose, **pas d'hébergeur loué**. Exposition par un **tunnel Cloudflare dédié** et un hostname propre — pas via le tunnel ni le load-balancer de schedual. | Le host tourne déjà 24/7 pour schedual : coût marginal ≈ 0. VM séparée et non la VM 102, parce que celle-ci sert un client payant (EPBI), a déjà un runbook de crise, et qu'un bug d'Amphi ne doit pas pouvoir devenir un CODE ROUGE. Tunnel séparé pour la même raison côté ingress. Le port-forwarding est de toute façon impossible (CGNAT + double NAT). |
@@ -137,7 +146,9 @@ Format court : décision, raison, alternative écartée. Les ADR marqués **↯*
 | 11 | **Le transcript canonique est écrit uniquement par le serveur** ; seules les *résolutions humaines de dispute* sont des écritures client. | Évite de mettre la transcription dans un CRDT : elle n'a pas de sémantique d'édition concurrente. Les notes, elles, sont bien un CRDT (Yjs). |
 | 12 | **Traçabilité par ancres**, pas par confiance : chaque bloc de notes généré porte `sourceSpans: [{startMs, endMs}]` vérifiés à la génération. Un bloc sans ancre valide est rejeté, pas affiché. | Critère d'acceptation n°6. Mécanisme décrit en [§6.3](#63-traçabilité--le-mécanisme). |
 | 13 | **Un `SessionEvent` générique dès M1** (type, `at_session_ms`, payload). | Débloque « je n'ai pas compris » (§9 du brief) et les futurs signaux sans migration. Coût aujourd'hui : une table. |
-| 14 | **Sauvegardes chiffrées vers un hôte tiers**, pas seulement sur pve-2. | Auto-héberger déplace le risque de la facture vers la panne : une coupure de courant chez toi met l'app hors ligne, un disque mort la supprime. La file offline côté client couvre la première ; seule une sauvegarde hors-site couvre la seconde. Même mécanisme que schedual (dumps chiffrés `age`). |
+| **15 ↯** | **Worker ASR local sur le Mac M4 de Leo**, qui tire les jobs de la file quand il est réveillé, via Tailscale (rien à exposer). Repli automatique vers Groq après expiration d'un délai, **en dégradant `K` à 1** et non seulement le fournisseur. | Le Mac est présent en cours (scénario du brief), transcrit à ~10–30× le temps réel et rend `K` gratuit — c'est ce qui permet à la fusion de redevenir le défaut. Dégrader `K` en même temps que le fournisseur borne le pire cas à 7,14 €/mois même si le Mac ne se réveille jamais. Contreparties assumées : ventilation et batterie pendant les cours (cycle utile ~5–10 %), et worker unique — si Leo est absent, tout bascule sur le repli. |
+| **16 ↯** | **LLM = Mistral Small 4** pour le document final (0,15 $ / 0,60 $ par M tokens), **modèle local sur le Mac** pour les résumés live, Claude Sonnet 5 en régénération manuelle. | Sous Haiku 4.5, Mistral Small 4 / DeepSeek V4 / Gemini Flash-Lite se tiennent en **22 centimes par mois** : le prix cesse d'être un critère discriminant, on choisit donc sur l'usage. Mistral est français — les cours sont en français avec du jargon anglais — et remet le traitement en UE gratuitement. DeepSeek est au même prix mais héberge en Chine, profil de risque différent pour des enregistrements d'enseignants. **Le choix reste à valider par le test à l'aveugle de M1**, pas par ce raisonnement. |
+| 17 | **Sauvegardes chiffrées vers un hôte tiers**, pas seulement sur pve-2. | Auto-héberger déplace le risque de la facture vers la panne : une coupure de courant chez toi met l'app hors ligne, un disque mort la supprime. La file offline côté client couvre la première ; seule une sauvegarde hors-site couvre la seconde. Même mécanisme que schedual (dumps chiffrés `age`). |
 
 ---
 
@@ -183,7 +194,7 @@ Package `packages/consensus`, TypeScript pur, aucune I/O, aucune dépendance ré
 
 ### 5.0 Avant la fusion : sélection des flux
 
-Toutes les sessions ne méritent pas 5 transcriptions payantes. À l'ouverture d'une fenêtre, on classe les participants par **score de qualité** et on ne transcrit que les `K` meilleurs (`K = 1` par défaut, `2` ou `3` sur les cours passés en profil Fusion) :
+Toutes les sessions ne méritent pas 5 transcriptions payantes. À l'ouverture d'une fenêtre, on classe les participants par **score de qualité** et on transcrit les `K` meilleurs (`K = 3` par défaut puisque l'ASR local est gratuit ; `K = 1` en mode repli, quand le Mac dort) :
 
 ```
 quality = 0.5·z(SNR estimé) + 0.3·z(énergie vocale médiane) + 0.2·(1 − taux de trous)
@@ -193,7 +204,7 @@ Le SNR est estimé côté client à partir du VAD : rapport entre l'énergie mé
 
 **Les flux non retenus sont enregistrés et conservés quand même**, pendant 7 jours. C'est ce qui rend le dispositif utilisable malgré la contrainte budgétaire : on n'a pas à décider *avant* le cours s'il mérite la fusion. Une séance qui s'avère importante — le chapitre qui tombe au partiel, le passage que personne n'a compris — est **rebasculée en fusion après coup**, en un clic, pour 0,074 € : les flux dormants partent à l'ASR et le consensus tourne sur l'ensemble.
 
-`K` reste donc le seul levier de coût variable, mais il n'est plus un pari.
+`K` n'est donc plus un levier de coût tant que le worker local tourne — il ne redevient contraignant qu'en mode repli, et la fusion rétroactive rattrape ces séances-là dès que le Mac se rebranche.
 
 ### 5.1 Synchronisation temporelle
 
@@ -288,7 +299,7 @@ Le gain de WER est **imprimé par le test**, pas seulement asserté :
 
 ### 6.1 Pendant le cours
 
-Toutes les N minutes (N = 5 en Éco, 3 en Équilibré — c'est un curseur de coût, pas une constante), un appel LLM :
+Toutes les 5 minutes, un appel LLM — **sur le modèle local du Mac** quand il est réveillé, sinon Mistral Small 4 :
 *entrée* = résumé courant + segments canoniques nouveaux + plan des slides s'il existe ; *sortie* = résumé mis à jour + points saillants + termes nouveaux. Affiché dans un panneau latéral « fil du cours », jamais injecté dans le document.
 
 ### 6.2 En fin de séance
@@ -394,7 +405,7 @@ Index clés : `CanonicalSegment(session_id, start_ms)`, `AudioChunk(participant_
 | Révocation | Le prof rouvre le lien → révocation → purge en cascade de la session (audio, transcripts, canoniques ; les notes rédigées à la main sont conservées, sans citations). |
 | Mode « transcription only » (**défaut**) | L'audio est transcrit puis supprimé du bucket dans la foulée (`delete_after = now`). Seules l'enveloppe d'énergie et la transcription survivent. Rétention audio = opt-in explicite, plafonnée à J+7 par lifecycle S3. |
 | Suppression en un clic | `DeletionRequest` → job qui purge chunks, segments, participations, contributions Yjs de l'utilisateur, embeddings, et anonymise les traces. Rapport de suppression affiché. Testé. |
-| Données en UE | Mieux que ça : Postgres et l'audio sont **chez toi**, l'ASR est chez OVH (Gravelines). **Le LLM reste le seul maillon hors UE** : Anthropic (US) sous DPA + CCT. Alternative 100 % UE derrière `LLMProvider` : Mistral (Paris) ou Claude via Bedrock `eu-central-1`. À trancher par toi ([§14](#14--ce-que-jai-dû-deviner)). |
+| Données en UE | **Atteint sans le chercher.** Postgres et l'audio sont chez toi ; l'ASR tourne sur ton Mac ; le document final part chez Mistral, à Paris. Le seul maillon hors UE est le **repli ASR chez Groq** (US, sous DPA + CCT), soit ~20 % des heures — et il bascule sur OVH Gravelines par une ligne de config si tu veux fermer complètement le sujet, pour +1,17 €/mois. |
 | Contrepartie de l'auto-hébergement | Héberger chez toi rend « données en UE » trivialement vrai, mais **te transfère les obligations de sécurité** : chiffrement disque au repos, contrôle d'accès, sauvegardes. Le chiffrement au repos est déjà en attente côté schedual — même sujet, même disque. À traiter avant le premier vrai enregistrement, pas après. |
 
 À produire hors code : un **registre de traitement** d'une page, une **note d'information** pour les enseignants, et un responsable de traitement désigné. Le meilleur usage de ces trois pages, c'est de les envoyer au DPO de l'école avant de commencer, pas après.
@@ -403,109 +414,90 @@ Index clés : `CanonicalSegment(session_id, start_ms)`, `AudioChunk(participant_
 
 ## 11. Coûts
 
-Hypothèses révisées avec tes réponses : **30 h de cours par semaine ≈ 130 h/mois** (le double de mon estimation initiale), 1 h ≈ 9 000 mots ≈ 15 000 tokens de transcript. 1 USD = 0,92 EUR. Électricité 0,20 €/kWh. Tarifs vérifiés le 2026-09-07.
+Base : **30 h de cours par semaine ≈ 130 h/mois**. 1 h ≈ 9 000 mots ≈ 15 000 tokens de transcript ; le document final consomme ~18 000 tokens en entrée et en produit ~5 000. 1 USD = 0,92 EUR. Tarifs vérifiés le 2026-09-08.
 
-### 11.1 Ce que change le passage à 30 h par semaine
+### 11.1 Le raisonnement en une ligne
 
-Le doublement du volume casse les trois profils de la version précédente :
+Trois postes, trois réponses différentes :
 
-| Profil (version précédente) | €/h | À 65 h/mois | À **130 h/mois** |
-|---|---|---|---|
-| Éco | 0,165 € | 10,73 € ✅ | **21,45 €** ❌ |
-| Équilibré | 0,265 € | 17,23 € ✅ | **34,45 €** ❌ |
-
-L'auto-hébergement avait donné ~6 € de marge ; le doublement du volume en consomme le double. Le poste qui explose n'est pas le LLM mais **le nombre de flux transcrits** : à K=2 sur tout, l'ASR seul coûte 9,62 €/mois, soit la moitié du budget avant d'avoir généré la moindre note.
-
-D'où le changement de structure : **le profil devient un attribut du cours, pas un réglage global.**
-
-*Si une partie de ces 30 h sont des TD, des projets ou des soutenances qui ne valent pas la peine d'être enregistrés, le volume réel baisse et tout se détend d'autant.*
-
-### 11.2 Ce qui reste gratuit
-
-| Poste | Version louée | Sur ton matériel |
+| Poste | Nature | Verdict |
 |---|---|---|
-| VM applicative | 3,79 €/mois | **0 €** — VM sur `infra-pve-2`, déjà allumé 24/7 pour schedual |
-| Postgres + Redis | inclus | 0 € |
-| Stockage audio | ~1 €/mois | **0 €** — voir ci-dessous |
-| Ingress public | inclus | 0 € — tunnel Cloudflare, plan gratuit |
-| Nom de domaine | ~1 €/mois | 0 à 1 €/mois selon sous-domaine ou nom dédié |
+| Héberger l'app | quelques watts sur une machine déjà allumée | **gratuit** — VM sur `infra-pve-2` |
+| Transcrire | une commodité : le Whisper local est le même modèle que le payant | **gratuit** — worker sur le Mac M4 |
+| Générer les notes | *le produit* — c'est là que le modèle change ce que tu lis | **payé** — et ça coûte 0,005 € par cours |
 
-En Opus 24 kbps mono 16 kHz, **un flux pèse 11 Mo par heure**. À 130 h/mois :
+Ce qui reste facturé, c'est **un appel d'API par cours**.
 
-| Ce qu'on garde | Volume |
+### 11.2 Pourquoi les serveurs ne font pas l'affaire
+
+Le même travail — lire 18 000 tokens de transcription, écrire un document de 5 000 :
+
+| Machine | Temps par cours | Coût réel | |
+|---|---|---|---|
+| **Mac M4** — déjà allumé, tu t'en sers | 1–3 min | ~0 € | ✅ |
+| ProLiant `infra-pve-1` — 24 threads | ~20–25 min | 11,20 €/mois d'électricité, et tu renonces à l'éteindre | ❌ |
+| ProLiant `infra-pve-2` — 12 threads, partagé | ~40–50 min | vole du CPU à la prod EPBI en journée | ❌ |
+| `infra-pve-ai` — 2× Tesla M40 | 2–10 min | 22 à 29 €/mois si rallumé pour Amphi seul | ⏸️ éteint |
+| Raspberry Pi | ne rattrape jamais la file | — | ❌ |
+| API | ~1 min | 0,68 €/mois | ✅ |
+
+Les Xeon E5 de 2012 (DDR3, sans GPU) sont limités par la bande passante mémoire, précisément ce dont l'inférence a besoin. Ton laptop les bat d'un facteur 10 à 20 en consommant quatre fois moins.
+
+*Bon usage du Raspberry Pi, en revanche :* cible de **sauvegarde hors-site** (ADR-17) à 5 W chez un tiers, et — idée à creuser — **enregistreur dédié avec micro USB au premier rang**, ce qui attaquerait le risque R2 bien mieux que de fusionner cinq téléphones du fond de l'amphi.
+
+### 11.3 Choix du modèle : le prix cesse d'être le critère
+
+Coût d'un document de cours, 18 k tokens en entrée / 5 k en sortie :
+
+| Modèle | $ / M tokens (in / out) | Par cours | Par mois |
+|---|---|---|---|
+| Claude Opus 5 | 5,00 / 25,00 | 0,198 € | 25,74 € |
+| Claude Sonnet 5 | 3,00 / 15,00 | 0,119 € | 15,47 € |
+| Claude Haiku 4.5 | 1,00 / 5,00 | 0,040 € | 5,15 € |
+| **Mistral Small 4** ⭐ | 0,15 / 0,60 | **0,0052 €** | **0,68 €** |
+| DeepSeek V4 | 0,14 / 0,28 | 0,0036 € | 0,47 € |
+| Gemini 2.5 Flash-Lite | 0,10 / 0,40 | 0,0035 € | 0,46 € |
+
+**Sous Haiku, les trois derniers se tiennent en 22 centimes par mois.** Optimiser à ce niveau n'a plus de sens : le critère redevient la qualité des notes. D'où ADR-16 — Mistral Small 4, français, UE, 22 centimes au-dessus du minimum — **sous réserve du test à l'aveugle de M1**, seul juge légitime.
+
+### 11.4 Le mois
+
+| Poste | Nominal — Mac réveillé | Repli — Mac endormi |
+|---|---|---|
+| ASR, `K = 3` | 0 € | Groq, `K = 1` : 0,037 €/h |
+| Résumés live | 0 € | Mistral : 0,005 €/h |
+| Document final | Mistral : 0,0052 €/h | idem |
+
+| Scénario | Total mensuel |
 |---|---|
-| Tous les flux, purge à J+7 | ~1,3 Go en régime permanent |
-| Le flux transcrit, gardé 1 an | **17 Go** |
-| Tous les flux (4 en moyenne), gardés 1 an | 69 Go |
+| **Nominal — Mac présent ~80 % des heures** | **2,77 €** ✅ |
+| Pire cas — Mac jamais réveillé du mois | 7,14 € ✅ |
+| Nominal + Sonnet 5 sur 30 h de cours denses | 6,34 € ✅ |
+| Nominal + Opus 5 sur 30 h | 8,71 € ✅ |
 
-Le stockage n'est toujours pas un poste de coût. C'est précisément ce qui permet la **fusion rétroactive** décrite en [§5.0](#50-avant-la-fusion--sélection-des-flux) : garder 7 jours d'audio dormant ne coûte rien, et transforme un choix irréversible avant le cours en une décision réversible après.
+Coût d'une heure de cours : **0,005 à 0,047 €** selon le mode — le critère du brief était < 0,30 €.
 
-### 11.3 Prix unitaires
-
-| Poste | Prix | Note |
-|---|---|---|
-| ASR **Groq** `whisper-large-v3-turbo` | **0,037 €/h** d'audio | défaut (ADR-01) · facturation min. 10 s/requête, sans effet sur des chunks de 20–30 s |
-| ASR OVHcloud AI Endpoints | 0,046 €/h | profil 100 % UE, +1,17 €/mois à 130 h |
-| Claude Haiku 4.5 | 1 $ / 5 $ par M tokens | résumés live et document final par défaut |
-| Claude Sonnet 5 | 3 $ / 15 $ par M tokens | document final en profil Fusion |
-| Claude Opus 5 | 5 $ / 25 $ par M tokens | régénération manuelle |
-
-### 11.4 Les profils deviennent des choix par cours
-
-| | **Minimal — défaut** | Suivi | **Fusion** | Max |
-|---|---|---|---|---|
-| Flux transcrits | 1 | 1 | **3** | 3 |
-| Résumé live | — | Haiku, /5 min | Haiku, /3 min | Haiku, /2 min |
-| Document final | Haiku 4.5 | Haiku 4.5 | **Sonnet 5** | Opus 5 |
-| ASR | 0,037 € | 0,037 € | 0,111 € | 0,111 € |
-| Résumés | 0 € | 0,033 € | 0,054 € | 0,081 € |
-| Document | 0,040 € | 0,040 € | 0,119 € | 0,198 € |
-| **Total** | **0,077 €/h** ✅ | **0,110 €/h** ✅ | **0,284 €/h** ✅ | **0,390 €/h** ⚠️ |
-
-Les quatre profils sauf Max tiennent le critère « < 0,30 €/h » du brief. Le passage d'un cours de Minimal à Fusion coûte **0,207 €/h**, et peut se faire **après** la séance tant que l'audio est encore là (7 jours).
-
-### 11.5 Le mois
-
-| Scénario sur 130 h/mois | Variable | Fixe | Total |
-|---|---|---|---|
-| Tout en Minimal | 10,01 € | ~1 € | **11,01 €** ✅ |
-| Tout en Suivi | 14,30 € | ~1 € | **15,30 €** ✅ |
-| **100 h Minimal + 30 h Fusion** (recommandé) | 16,22 € | ~1 € | **17,22 €** ✅ |
-| 100 h Suivi + 30 h Fusion | 19,52 € | ~1 € | 20,52 € ⚠️ |
-| Tout en Fusion | 36,92 € | ~1 € | 36,92 € ❌ |
-
-**La configuration recommandée : Minimal partout, Fusion sur ~7 h de cours par semaine** — les matières denses, celles qui tombent aux partiels. 17,22 €/mois, marge de 2,80 €.
-
-C'est aussi le bon choix pédagogique : personne n'a besoin de notes de qualité maximale sur les 30 heures. Ce qui compte, c'est de pouvoir décider *lesquelles* — et de pouvoir changer d'avis après coup.
-
-Garde-fous inchangés : `CostLedger` par appel provider, tableau de bord €/session et €/mois, plafond mensuel dur (80 % → alerte, 100 % → tout repasse en Minimal). À 130 h/mois, un worker qui boucle coûte cher vite.
-
-### 11.6 Leviers si ça se tend
-
-| Levier | Gain | Coût |
-|---|---|---|
-| Supprimer le résumé live sur les cours en Suivi | −4,29 €/mois | on perd le panneau « fil du cours », pas les notes finales |
-| Document final via l'**API Batch** (−50 %) sur les cours Minimal | −2,60 €/mois | notes disponibles le lendemain, pas en 3 min — casse un critère d'acceptation, donc opt-in par cours |
-| Repasser l'ASR d'OVH à Groq | déjà pris (défaut) | ASR hors UE |
-| `infra-pve-ai` rallumé | −10 €/mois et `K` illimité | ~22 à 29 €/mois d'électricité si c'est pour Amphi seul — **perdant**, sauf s'il revient pour tes agents schedual |
+Le budget n'est plus une contrainte de conception. Les garde-fous restent (`CostLedger` par appel, plafond mensuel dur), mais ils protègent désormais contre un bug — un worker qui boucle — et non contre l'usage normal.
 
 ## 12. Risques
 
 | # | Risque | Gravité | Mitigation | Quand on saura |
 |---|---|---|---|---|
 | R1 | **iOS coupe l'enregistrement écran verrouillé** | 🔴 Critique — casse le scénario nominal | Wake Lock, détection de trous, consigne explicite, repli sur un flux Android | Test réel semaine 1 |
-| R2 | **Acoustique d'amphi** : téléphone à 20 m d'un prof sans micro → WER > 40 %, aucune fusion ne rattrape ça | 🔴 Critique | Sélection des flux par SNR, alerte « qualité insuffisante » en direct, encourager un téléphone au 1er rang | Premier vrai cours |
+| R2 | **Acoustique d'amphi** : téléphone à 20 m d'un prof sans micro → WER > 40 %, aucune fusion ne rattrape ça | 🔴 Critique | Sélection des flux par SNR, alerte « qualité insuffisante » en direct, encourager un téléphone au 1er rang. À terme : un enregistreur dédié devant | Premier vrai cours |
 | R3 | **Erreurs corrélées** → gain de fusion faible | 🟠 | Test de non-régression, honnêteté sur la promesse | M3 |
-| R4 | **Amphi consomme les ressources du host qui sert EPBI** | 🟠 | Quotas CPU/RAM Proxmox sur la VM Amphi ; l'ASR, de loin le plus gourmand, ne tourne pas chez toi (ADR-01) | Semaine 1 |
+| R4 | **Worker ASR unique** : si Leo est absent ou son Mac endormi, tout bascule en repli — `K = 1`, donc pas de fusion sur ces séances | 🟠 | Fusion rétroactive dès que le Mac se rebranche (l'audio dort 7 jours) ; coût borné à 7,14 €/mois même en repli permanent | Dès l'usage |
 | R5 | **Coupure de courant ou d'internet chez toi pendant un cours** | 🟠 | La file offline côté client absorbe : l'enregistrement continue sur le téléphone, la synchro se fait au retour. Le critère « < 3 min » se dégrade, **aucune donnée n'est perdue**. | Premier incident |
-| R6 | **Perte de disque = perte de tout** — il n'y a plus d'hébergeur pour sauvegarder à ta place | 🟠 | Dumps chiffrés `age` hors-site, même mécanisme que schedual, **restauration testée** avant le premier vrai cours (ADR-14) | M1 |
-| R7 | Consentement refusé par un intervenant extérieur | 🟢 | Accord déjà obtenu pour les enseignants de la promo ; mode « notes seules » utile en soi | Résolu pour l'essentiel |
-| R8 | Dérive d'horloge non maîtrisée | 🟡 | ADR-03, test dédié | M3 |
-| R9 | Slop LLM non traçable | 🟡 | Vérification d'ancres avec rejet ([§6.3](#63-traçabilité--le-mécanisme)) | M1 |
-| R10 | Batterie / chauffe sur 4 h de cours | 🟡 | 16 kHz mono, VAD, écran mis en veille douce si possible | Test semaine 1 |
-| R11 | VM figée sur pve-2 — précédent documenté sur la VM 102 | 🟡 | VM séparée, watchdog fleet déjà en place, file offline côté client | — |
-| R12 | ICS Brightspace absent ou inexploitable | 🟡 | Saisie manuelle des cours en repli | M4 |
-| R13 | Budget dépassé | 🟢 | `CostLedger` + plafond dur ; la pression a nettement baissé avec l'auto-hébergement | Semaine 1 d'usage |
+| R6 | **Perte de disque = perte de tout** — il n'y a plus d'hébergeur pour sauvegarder à ta place | 🟠 | Dumps chiffrés `age` hors-site, **restauration testée** avant le premier vrai cours (ADR-17) | M1 |
+| R7 | **Qualité du modèle bon marché** : Mistral Small 4 tient-il sur du français académique bruité avec ancrage vérifié ? | 🟠 | Test à l'aveugle en M1 sur un vrai cours — local, Mistral, Haiku, Sonnet — Leo tranche. `LLMProvider` rend la bascule gratuite | M1 |
+| R8 | Batterie et ventilation du Mac pendant les cours | 🟡 | Cycle utile ~5–10 %, jobs différés si sur batterie faible, génération du document après le cours | Test semaine 1 |
+| R9 | Dérive d'horloge non maîtrisée | 🟡 | ADR-03, test dédié | M3 |
+| R10 | Slop LLM non traçable | 🟡 | Vérification d'ancres avec rejet ([§6.3](#63-traçabilité--le-mécanisme)) — d'autant plus critique avec un petit modèle | M1 |
+| R11 | Batterie / chauffe des téléphones sur 4 h de cours | 🟡 | 16 kHz mono, VAD, écran en veille douce si possible | Test semaine 1 |
+| R12 | VM figée sur pve-2 — précédent documenté sur la VM 102 | 🟡 | VM séparée, watchdog fleet déjà en place, file offline côté client | — |
+| R13 | ICS Brightspace absent ou inexploitable | 🟡 | Saisie manuelle des cours en repli | M4 |
+| R14 | Amphi consomme les ressources du host qui sert EPBI | 🟢 | Quotas Proxmox ; l'inférence ne tourne plus dessus du tout | — |
+| R15 | Budget dépassé | 🟢 | À 2,77 €/mois, ce n'est plus une contrainte de conception. `CostLedger` + plafond dur protègent contre un bug, pas contre l'usage | — |
 
 ## 13. Jalons
 
@@ -533,38 +525,38 @@ packages/consensus  packages/shared   packages/db
 
 ## 14. Ce que j'ai dû deviner
 
-Mise à jour après tes réponses. Huit points tranchés, quatre ouverts — dont aucun n'est bloquant pour M1.
+Après tes réponses, il ne reste rien de bloquant.
 
-| # | Hypothèse | Statut |
+| # | Point | Statut |
 |---|---|---|
-| 1 | **Hébergement** | ✅ VM dédiée sur `infra-pve-2` + tunnel Cloudflare dédié |
-| 2 | **Stockage audio** | ✅ Disque local. 17 Go/an pour le flux transcrit ; garder 7 jours de flux dormants ne coûte rien et débloque la fusion rétroactive |
-| 3 | **Autorisation des enseignants** | ✅ Accord verbal déjà obtenu. `ConsentRecord` saisi une fois par cours. La trace écrite reste nécessaire |
-| 4 | **ASR auto-hébergé** | ✅ Écarté : plus cher en électricité qu'en API, et `infra-pve-ai` ne revient pas tout de suite |
-| 5 | **Localisation des traitements** | ✅ Tranché par toi : le moins cher qui fait le travail. ASR chez Groq, LLM chez Anthropic, tous deux hors UE sous DPA/CCT. Les données **au repos** restent chez toi, en France. Le profil 100 % UE (OVH + Mistral) reste une ligne de config si l'école le demandait |
-| 6 | **Volume** | ✅ 30 h/semaine ≈ 130 h/mois. A cassé les profils précédents, d'où la refonte du [§11](#11-coûts) |
-| 7 | **Auth** | ✅ Liste d'invités plutôt qu'allowlist de domaine — plus simple et plus stricte à 30 personnes. Ta question sur les domaines mail devient sans objet |
-| 8 | **Profil par défaut** | ✅ **Minimal**, avec bascule en Fusion par cours et rétroactivement |
-| 9 | **Nom `amphi`**, dossier `/Users/leo/amphi` | ⏳ Cosmétique — un `git mv` suffit |
-| 10 | **Responsable de traitement RGPD** = toi ou une association étudiante | ⏳ À fixer avant le premier enregistrement réel. C'est de la paperasse, pas du code |
-| 11 | **Part réellement enregistrable des 30 h** — je les compte toutes ; si un tiers sont des TD ou des projets, le budget se détend nettement | ⏳ Se saura à l'usage, le `CostLedger` le mesurera |
-| 12 | **Interface en français**, contenu FR/EN mélangé · cadence des résumés · Excalidraw et Mermaid stockés dans le document Yjs | ⏳ Faible, réglable |
+| 1 | Hébergement | ✅ VM dédiée sur `infra-pve-2` + tunnel Cloudflare dédié |
+| 2 | Stockage audio | ✅ Disque local. 7 jours de flux dormants ne coûtent rien et débloquent la fusion rétroactive |
+| 3 | Autorisation des enseignants | ✅ Accord verbal obtenu. `ConsentRecord` saisi une fois par cours ; la trace écrite reste nécessaire |
+| 4 | ASR | ✅ Worker local sur ton Mac M4, Groq en repli avec dégradation de `K` |
+| 5 | LLM | ✅ Mistral Small 4 — le moins cher qui tienne, à 22 centimes/mois du minimum absolu, français et UE. **Sous réserve du test à l'aveugle de M1** |
+| 6 | Localisation des traitements | ✅ UE atteinte sans la chercher. Seul le repli ASR (Groq, US) sort de l'UE, ~20 % des heures, basculable sur OVH pour +1,17 €/mois |
+| 7 | Volume | ✅ 30 h/semaine ≈ 130 h/mois |
+| 8 | Auth | ✅ Liste d'invités plutôt qu'allowlist de domaine — plus simple et plus stricte à 30 personnes |
+| 9 | Profil par défaut | ✅ **Fusion à 3 flux partout**, l'ASR local l'ayant rendue gratuite |
+| 10 | Serveurs pour l'IA | ✅ Écartés, mesures à l'appui : Xeon E5 de 2012 sans GPU, 10 à 20× plus lents que ton Mac pour quatre fois la consommation |
+| 11 | Nom `amphi`, dossier `/Users/leo/amphi` | ⏳ Cosmétique — un `git mv` suffit |
+| 12 | Responsable de traitement RGPD | ⏳ À fixer avant le premier enregistrement réel. De la paperasse, pas du code |
+| 13 | Part réellement enregistrable des 30 h | ⏳ Se saura à l'usage, le `CostLedger` le mesurera |
+| 14 | Interface en français · cadence des résumés · Excalidraw et Mermaid dans le document Yjs | ⏳ Faible, réglable |
 
 ## 15. Prochaine étape
 
-Plus rien ne me bloque. Il reste **une validation** de ta part : les sept conclusions du [§0](#0-tldr) et les ADR marqués **↯**, en particulier les deux qui s'écartent le plus de ton brief :
+Toutes les questions ouvertes sont refermées. Il me manque **ta validation explicite de ce document** — tu avais posé comme règle de le valider avant tout code applicatif, et je m'y tiens.
 
-- **ADR-10** — liste d'invités au lieu d'une allowlist de domaine ;
-- **le profil Minimal par défaut** ([§11.4](#114-les-profils-deviennent-des-choix-par-cours)), qui veut dire qu'**un seul flux est transcrit sauf demande** : la fusion multi-appareils, cœur technique de ton brief, devient un choix par cours au lieu d'être le comportement normal. C'est le budget qui l'impose, pas la technique — et la fusion rétroactive à 7 jours en enlève l'essentiel du regret. Si tu préfères l'inverse, il faut soit accepter ~35 €/mois, soit enregistrer moins d'heures.
+Dès que tu donnes le feu vert, M1 commence par les trois mesures qui peuvent invalider des pans entiers du plan, avant toute fonctionnalité :
 
-Dès que tu valides, M1 commence par les deux points les plus risqués, pas les plus faciles :
+1. **Capture 90 minutes sur iPhone, écran verrouillé.** Si ça échoue, le produit change de forme — mieux vaut le savoir avant d'écrire le pipeline de consensus.
+2. **Whisper sur ton M4.** Tout le modèle de coût repose sur « 10 à 30× le temps réel ». Si c'est 3×, le worker local reste utile mais le repli devient la norme.
+3. **Test à l'aveugle du document final** — modèle local, Mistral Small 4, Haiku 4.5, Sonnet 5 — sur un vrai cours à toi, sans étiquettes. Tu choisis. « Le moins cher qui fait le taff » suppose de savoir lequel fait le taff, et ce n'est pas à moi d'en décider sur tes matières.
 
-- **le test de capture 90 minutes sur iPhone écran verrouillé** — s'il échoue, le produit change de forme, et mieux vaut le savoir avant d'écrire le pipeline de consensus ;
-- **la restauration d'une sauvegarde** — auto-héberger déplace le risque de la facture vers la panne ; une sauvegarde jamais restaurée n'est pas une sauvegarde.
+Puis la restauration d'une sauvegarde, avant le premier enregistrement réel : auto-héberger déplace le risque de la facture vers la panne, et une sauvegarde jamais restaurée n'est pas une sauvegarde.
 
-M1 embarquera aussi une comparaison **Haiku 4.5 contre Sonnet 5 sur un vrai cours à toi** : « le moins cher qui fait le taff » suppose de savoir lequel fait le taff, et je ne peux pas en décider à ta place sur tes matières.
-
-*Document généré le 2026-09-07, révisé le 2026-09-08 (inventaire du matériel, puis volume réel de cours).*
+*Document généré le 2026-09-07, révisé le 2026-09-08 (inventaire du matériel, volume réel de cours, worker local et choix du modèle).*
 
 * Tarifs ASR/LLM vérifiés à cette date — à re-vérifier avant tout engagement.*
 
