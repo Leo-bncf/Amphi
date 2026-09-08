@@ -6,129 +6,125 @@
 <title>Amphi — Studio</title>
 <style>
   :root {
-    --bg: #fbfaf8;
-    --surface: #ffffff;
-    --line: #e6e2db;
-    --ink: #1c1a17;
-    --muted: #6f6a62;
-    --accent: #b4472c;
-    --accent-soft: #fdf0ec;
-    --ok: #2f6b4f;
-    --warn: #9a6b1e;
-    --radius: 10px;
-    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --bg: #fbfaf8; --surface: #fff; --line: #e6e2db; --ink: #1c1a17; --muted: #6f6a62;
+    --accent: #b4472c; --accent-soft: #fdf0ec; --edit: #2f6b4f; --edit-soft: #eef5f1;
+    --warn: #9a6b1e; --mono: ui-monospace, "SF Mono", Menlo, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #161513;
-      --surface: #1f1e1b;
-      --line: #34322d;
-      --ink: #ece8e1;
-      --muted: #9b958a;
-      --accent: #e2704f;
-      --accent-soft: #2b201c;
-      --ok: #7fb99a;
-      --warn: #d3a45e;
+      --bg: #161513; --surface: #1f1e1b; --line: #34322d; --ink: #ece8e1; --muted: #9b958a;
+      --accent: #e2704f; --accent-soft: #2b201c; --edit: #7fb99a; --edit-soft: #1c2621; --warn: #d3a45e;
     }
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--ink);
-    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  }
-  header {
-    border-bottom: 1px solid var(--line);
-    padding: 14px 22px;
-    display: flex;
-    align-items: baseline;
-    gap: 14px;
-    position: sticky;
-    top: 0;
-    background: var(--bg);
-    z-index: 5;
-  }
-  header h1 { font-size: 16px; margin: 0; letter-spacing: -0.01em; }
-  header .sub { color: var(--muted); font-size: 13px; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { border-bottom: 1px solid var(--line); padding: 13px 22px; display: flex;
+           align-items: baseline; gap: 14px; position: sticky; top: 0; background: var(--bg); z-index: 20; }
+  header h1 { font-size: 16px; margin: 0; }
+  header .sub, #engine { color: var(--muted); font-size: 13px; }
+  #engine { font-family: var(--mono); font-size: 12px; }
   header .spacer { flex: 1; }
-  #engine { font-size: 12px; color: var(--muted); font-family: var(--mono); }
 
-  main { max-width: 1180px; margin: 0 auto; padding: 22px; display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
-  .card h2 { margin: 0 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 600; }
-  .card .hint { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+  main { max-width: 1400px; margin: 0 auto; padding: 20px; display: grid; gap: 16px;
+         grid-template-columns: 1fr 1fr; align-items: start; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
   .full { grid-column: 1 / -1; }
 
-  button {
-    font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line);
-    background: var(--surface); color: var(--ink); padding: 9px 15px; transition: background .12s, border-color .12s;
-  }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .card h2 { margin: 0 0 3px; font-size: 12px; text-transform: uppercase; letter-spacing: .07em;
+             color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .card .hint { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+  button { font: inherit; cursor: pointer; border-radius: 7px; border: 1px solid var(--line);
+           background: var(--surface); color: var(--ink); padding: 7px 13px; }
   button:hover:not(:disabled) { border-color: var(--accent); }
-  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-  button.primary:hover:not(:disabled) { filter: brightness(1.06); }
+  button.sm { padding: 4px 9px; font-size: 12px; }
 
-  .recorder { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  #recBtn { width: 74px; height: 74px; border-radius: 50%; font-size: 26px; display: grid; place-items: center; padding: 0; flex: none; }
-  #recBtn.recording { background: var(--accent); border-color: var(--accent); color: #fff; animation: pulse 1.7s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(180,71,44,.42); } 50% { box-shadow: 0 0 0 13px rgba(180,71,44,0); } }
+  #recBtn { width: 68px; height: 68px; border-radius: 50%; font-size: 24px; padding: 0; flex: none;
+            display: grid; place-items: center; }
+  #recBtn.recording { background: var(--accent); border-color: var(--accent); color: #fff;
+                      animation: pulse 1.7s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(180,71,44,.4); } 50% { box-shadow: 0 0 0 12px rgba(180,71,44,0); } }
   @media (prefers-reduced-motion: reduce) { #recBtn.recording { animation: none; } }
-
-  .meta { display: flex; flex-direction: column; gap: 6px; min-width: 190px; }
-  #timer { font-family: var(--mono); font-size: 28px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  #timer { font-family: var(--mono); font-size: 26px; font-variant-numeric: tabular-nums; }
   #status { color: var(--muted); font-size: 13px; min-height: 1.4em; }
+  #levelWrap { flex: 1; min-width: 130px; height: 38px; display: flex; align-items: center; gap: 2px; }
+  .bar { flex: 1; background: var(--line); border-radius: 1px; height: 4px; transition: height .07s linear; }
+  audio { width: 100%; margin-top: 12px; }
 
-  #levelWrap { flex: 1; min-width: 150px; height: 40px; display: flex; align-items: center; gap: 2px; }
-  .bar { flex: 1; background: var(--line); border-radius: 1px; height: 4px; transition: height .07s linear, background .07s linear; }
-
-  audio { width: 100%; margin-top: 14px; }
-
-  .seg { padding: 5px 8px; border-radius: 6px; display: flex; gap: 10px; align-items: baseline; }
+  .scroll { max-height: 420px; overflow-y: auto; }
+  .seg { padding: 4px 7px; border-radius: 5px; display: flex; gap: 9px; align-items: baseline; }
   .seg:hover { background: var(--accent-soft); }
   .seg.playing { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
-  .seg time { font-family: var(--mono); font-size: 12px; color: var(--accent); cursor: pointer; flex: none; font-variant-numeric: tabular-nums; }
+  .seg time { font-family: var(--mono); font-size: 12px; color: var(--accent); cursor: pointer;
+              flex: none; font-variant-numeric: tabular-nums; }
   .seg.low { border-left: 2px solid var(--warn); }
-  .scroll { max-height: 460px; overflow-y: auto; }
 
-  .notes h3 { font-size: 17px; margin: 20px 0 6px; }
-  .notes h4 { font-size: 15px; margin: 16px 0 4px; color: var(--muted); }
-  .notes p { margin: 6px 0; }
-  .notes ul { margin: 6px 0; padding-left: 20px; }
-  .notes .anchor { font-family: var(--mono); font-size: 11px; color: var(--accent); cursor: pointer; margin-left: 6px; opacity: .65; }
-  .notes .anchor:hover { opacity: 1; }
-  .notes .def { border-left: 2px solid var(--line); padding-left: 12px; margin: 10px 0; }
-  .notes .def b { color: var(--accent); }
-  .callout { border-radius: 8px; padding: 10px 13px; margin: 10px 0; border: 1px solid var(--line); }
-  .callout .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); display: block; margin-bottom: 3px; }
+  #drop { border: 1.5px dashed var(--line); border-radius: 9px; padding: 18px; text-align: center;
+          color: var(--muted); font-size: 13px; cursor: pointer; transition: border-color .15s, background .15s; }
+  #drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .att { border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; margin-top: 9px; }
+  .att .top { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+  .att .top b { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .att .tag { font-size: 11px; font-family: var(--mono); color: var(--muted); }
+  .att pre { margin: 8px 0 0; font-size: 12px; white-space: pre-wrap; max-height: 130px;
+             overflow-y: auto; color: var(--muted); font-family: var(--mono); }
+  .att img { max-width: 100%; border-radius: 6px; margin-top: 8px; }
+
+  .notes h3 { font-size: 17px; margin: 4px 0 6px; }
+  .notes h4 { font-size: 15px; margin: 15px 0 3px; color: var(--muted); }
+  .notes p, .notes li { margin: 5px 0; }
+  .blk { border-radius: 6px; padding: 3px 7px; margin: 2px -7px; position: relative; }
+  .blk:hover { background: var(--accent-soft); }
+  .blk[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; background: var(--surface); }
+  .blk.edited { border-left: 2px solid var(--edit); background: var(--edit-soft); }
+  .blk.edited::after { content: "modifié"; font-size: 10px; color: var(--edit); text-transform: uppercase;
+                       letter-spacing: .06em; margin-left: 8px; vertical-align: super; }
+  .anchor { font-family: var(--mono); font-size: 11px; color: var(--accent); cursor: pointer;
+            margin-left: 6px; opacity: .6; user-select: none; }
+  .anchor:hover { opacity: 1; }
+  .anchor.att { color: var(--muted); cursor: default; }
+  .def { border-left: 2px solid var(--line); padding-left: 11px; }
+  .def b { color: var(--accent); }
+  .callout { border-radius: 7px; padding: 9px 12px; border: 1px solid var(--line); }
+  .callout .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
+                  color: var(--muted); display: block; margin-bottom: 2px; }
   .callout.a-retenir { background: var(--accent-soft); border-color: var(--accent); }
 
-  .stats { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .diagram { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-top: 12px; }
+  .diagram .render { overflow-x: auto; text-align: center; padding: 6px 0; }
+  .diagram textarea { width: 100%; font-family: var(--mono); font-size: 12px; border: 1px solid var(--line);
+                      border-radius: 6px; padding: 8px; background: var(--bg); color: var(--ink);
+                      min-height: 90px; resize: vertical; }
+  .diagram .cap { font-size: 12px; color: var(--muted); margin: 6px 0; }
+
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--muted);
+           margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--line); }
   .stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
-  .empty { color: var(--muted); font-size: 14px; padding: 26px 0; text-align: center; }
+  .empty { color: var(--muted); font-size: 14px; padding: 22px 0; text-align: center; }
   .err { color: var(--accent); font-size: 13px; }
-  code { font-family: var(--mono); font-size: 12px; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+  .ok { color: var(--edit); font-size: 12px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Amphi</h1>
-  <span class="sub">studio local</span>
+  <h1>Amphi</h1><span class="sub">studio local</span>
   <span class="spacer"></span>
+  <span id="saveState" class="ok"></span>
   <span id="engine">connexion…</span>
 </header>
 
 <main>
   <section class="card full">
     <h2>Enregistrement</h2>
-    <p class="hint">Le micro du Mac. Tout reste sur cette machine : l'audio n'est envoyé nulle part.</p>
-    <div class="recorder">
-      <button id="recBtn" title="Démarrer l'enregistrement">●</button>
-      <div class="meta">
-        <span id="timer">00:00</span>
-        <span id="status">prêt</span>
+    <div class="row" style="gap:15px">
+      <button id="recBtn" title="Enregistrer">●</button>
+      <div style="display:flex;flex-direction:column;gap:5px;min-width:180px">
+        <span id="timer">00:00</span><span id="status">prêt</span>
       </div>
       <div id="levelWrap"></div>
     </div>
@@ -137,237 +133,401 @@
 
   <section class="card">
     <h2>Transcription</h2>
-    <p class="hint">Clique un horodatage pour sauter au passage. Les segments à faible confiance sont marqués.</p>
+    <p class="hint">Clique un horodatage pour sauter au passage.</p>
     <div id="transcript" class="scroll"><div class="empty">Rien encore.</div></div>
     <div class="stats" id="tStats" hidden></div>
   </section>
 
   <section class="card">
-    <h2>Notes</h2>
-    <p class="hint">Chaque bloc renvoie à un passage horodaté. Un bloc sans ancre valide est écarté, jamais affiché.</p>
-    <button id="notesBtn" class="primary" disabled>Générer les notes</button>
-    <div id="notes" class="notes scroll"><div class="empty">Transcris d'abord une séance.</div></div>
+    <h2>Documents</h2>
+    <p class="hint">Photo du tableau, diapositive, ou texte collé. Le contenu devient une source citable par les notes.</p>
+    <div id="drop">Dépose une image ou un fichier texte — ou clique pour choisir</div>
+    <input type="file" id="fileInput" accept="image/*,.txt,.md" multiple hidden />
+    <div class="row" style="margin-top:9px">
+      <button class="sm" id="pasteBtn">Coller du texte</button>
+    </div>
+    <div id="attachments"></div>
+  </section>
+
+  <section class="card full">
+    <h2>Notes <span id="editHint" class="tag" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
+    <p class="hint">Chaque bloc est modifiable — clique dedans et écris. Ce que tu modifies est conservé lors d'une régénération, jamais écrasé.</p>
+    <div class="row" style="margin-bottom:12px">
+      <button id="notesBtn" class="primary" disabled>Générer les notes</button>
+      <button id="diagBtn" disabled>Faire un schéma</button>
+      <button id="saveBtn" class="sm" disabled>Enregistrer</button>
+      <span id="notesErr" class="err"></span>
+    </div>
+    <div id="notes" class="notes"><div class="empty">Transcris une séance ou dépose un document.</div></div>
+    <div id="diagrams"></div>
   </section>
 </main>
 
+<!-- build UMD : pose globalThis.mermaid, ce n'est pas un module ES -->
+<script src="/vendor/mermaid.min.js"></script>
 <script type="module">
+const mermaid = globalThis.mermaid;
+
 const $ = (id) => document.getElementById(id);
-const state = { rec: null, chunks: [], startedAt: 0, timer: null, segments: [], blobUrl: null };
+const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "neutral", securityLevel: "strict" });
 
-// ---- niveau audio ----
-const BARS = 28;
-const levelWrap = $("levelWrap");
-const bars = Array.from({ length: BARS }, () => {
-  const b = document.createElement("div");
-  b.className = "bar";
-  levelWrap.appendChild(b);
-  return b;
-});
+const state = {
+  rec: null, chunks: [], startedAt: 0, timer: null,
+  segments: [], attachments: [], doc: null, diagrams: [], blobUrl: null, dirty: false,
+};
 
+const fmt = (ms) => {
+  const s = Math.floor(ms / 1000);
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+};
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ------------------------------------------------------------------ moteur
 async function checkEngine() {
   try {
-    const r = await fetch("/health");
-    const h = await r.json();
-    const battery = h.batteryPercent === null ? "secteur" : `${h.batteryPercent}%`;
-    $("engine").textContent = h.warm ? `${h.model.split("/").pop()} · ${battery}` : "modèle en chargement…";
+    const h = await (await fetch("/health")).json();
+    const batt = h.batteryPercent === null ? "secteur" : `${h.batteryPercent}%`;
+    $("engine").textContent = h.warm ? `${h.model.split("/").pop()} · ${batt}` : "chargement du modèle…";
     if (!h.warm) setTimeout(checkEngine, 2000);
-  } catch {
-    $("engine").textContent = "serveur injoignable";
-  }
+  } catch { $("engine").textContent = "serveur injoignable"; }
 }
 checkEngine();
 
-function fmt(ms) {
-  const s = Math.floor(ms / 1000);
-  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-}
+// --------------------------------------------------------------- niveau audio
+const BARS = 26;
+const bars = Array.from({ length: BARS }, () => {
+  const b = document.createElement("div"); b.className = "bar";
+  $("levelWrap").appendChild(b); return b;
+});
 
-$("recBtn").addEventListener("click", () => (state.rec ? stop() : start()));
+// ------------------------------------------------------------ enregistrement
+$("recBtn").addEventListener("click", () => (state.rec ? stopRec() : startRec()));
 
-async function start() {
+async function startRec() {
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true },
     });
-  } catch (e) {
-    $("status").innerHTML = `<span class="err">micro refusé — autorise l'accès dans le navigateur</span>`;
-    return;
+  } catch {
+    $("status").innerHTML = `<span class="err">micro refusé</span>`; return;
   }
-
-  // Analyse du niveau : donne un retour visuel immédiat, et permet de voir tout
-  // de suite qu'on enregistre bien la salle et pas le silence.
   const ctx = new AudioContext();
-  const analyser = ctx.createAnalyser();
-  analyser.fftSize = 512;
-  ctx.createMediaStreamSource(stream).connect(analyser);
-  const data = new Uint8Array(analyser.frequencyBinCount);
+  const an = ctx.createAnalyser(); an.fftSize = 512;
+  ctx.createMediaStreamSource(stream).connect(an);
+  const data = new Uint8Array(an.frequencyBinCount);
   const draw = () => {
     if (!state.rec) { bars.forEach((b) => (b.style.height = "4px")); return; }
-    analyser.getByteFrequencyData(data);
+    an.getByteFrequencyData(data);
     const step = Math.floor(data.length / BARS);
     bars.forEach((b, i) => {
       const v = data[i * step] / 255;
-      b.style.height = `${4 + v * 34}px`;
+      b.style.height = `${4 + v * 32}px`;
       b.style.background = v > 0.05 ? "var(--accent)" : "var(--line)";
     });
     requestAnimationFrame(draw);
   };
-
   const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/mp4";
   state.chunks = [];
   state.rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
   state.rec.ondataavailable = (e) => e.data.size > 0 && state.chunks.push(e.data);
-  state.rec.onstop = () => {
-    stream.getTracks().forEach((t) => t.stop());
-    ctx.close();
-    transcribe(new Blob(state.chunks, { type: mime }), mime);
-  };
+  state.rec.onstop = () => { stream.getTracks().forEach((t) => t.stop()); ctx.close();
+                             transcribe(new Blob(state.chunks, { type: mime }), mime); };
   state.rec.start(1000);
-  state.startedAt = Date.now();
-  draw();
-
-  $("recBtn").classList.add("recording");
-  $("recBtn").textContent = "■";
+  state.startedAt = Date.now(); draw();
+  $("recBtn").classList.add("recording"); $("recBtn").textContent = "■";
   $("status").textContent = "enregistrement…";
   state.timer = setInterval(() => ($("timer").textContent = fmt(Date.now() - state.startedAt)), 250);
 }
 
-function stop() {
-  clearInterval(state.timer);
-  state.rec.stop();
-  state.rec = null;
-  $("recBtn").classList.remove("recording");
-  $("recBtn").textContent = "●";
-  $("status").textContent = "transcription en cours…";
+function stopRec() {
+  clearInterval(state.timer); state.rec.stop(); state.rec = null;
+  $("recBtn").classList.remove("recording"); $("recBtn").textContent = "●";
+  $("status").textContent = "transcription…";
 }
 
 async function transcribe(blob, mime) {
   if (state.blobUrl) URL.revokeObjectURL(state.blobUrl);
   state.blobUrl = URL.createObjectURL(blob);
-  const player = $("player");
-  player.src = state.blobUrl;
-  player.hidden = false;
-
+  $("player").src = state.blobUrl; $("player").hidden = false;
   const t0 = performance.now();
   try {
-    const r = await fetch("/transcribe", {
-      method: "POST",
-      headers: { "Content-Type": "application/octet-stream", "X-Mime-Type": mime },
-      body: blob,
-    });
-    if (!r.ok) throw new Error((await r.json()).error ?? `HTTP ${r.status}`);
-    const result = await r.json();
-    state.segments = result.segments;
-    renderTranscript(result, (performance.now() - t0) / 1000);
-    $("notesBtn").disabled = state.segments.length === 0;
-    $("status").textContent = "prêt";
-  } catch (e) {
-    $("status").innerHTML = `<span class="err">${e.message}</span>`;
-  }
+    const r = await fetch("/transcribe", { method: "POST", body: blob,
+      headers: { "Content-Type": "application/octet-stream", "X-Mime-Type": mime } });
+    const res = await r.json();
+    if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
+    state.segments = res.segments;
+    renderTranscript(res, (performance.now() - t0) / 1000);
+    refreshButtons(); $("status").textContent = "prêt";
+  } catch (e) { $("status").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
 }
 
-function renderTranscript(result, wallSeconds) {
-  const host = $("transcript");
-  host.innerHTML = "";
-  if (result.segments.length === 0) {
-    host.innerHTML = `<div class="empty">Aucune parole détectée.</div>`;
-    return;
+function renderTranscript(res, wall) {
+  const host = $("transcript"); host.innerHTML = "";
+  if (!res.segments.length) { host.innerHTML = `<div class="empty">Aucune parole détectée.</div>`; return; }
+  host.classList.add("scroll");
+  for (const seg of res.segments) {
+    const d = document.createElement("div");
+    d.className = "seg" + (seg.avgConfidence < 0.6 ? " low" : "");
+    d.dataset.start = seg.startMs; d.dataset.end = seg.endMs;
+    d.innerHTML = `<time title="confiance ${(seg.avgConfidence * 100).toFixed(0)} %">${fmt(seg.startMs)}</time><span>${esc(seg.text)}</span>`;
+    d.querySelector("time").addEventListener("click", () => seek(seg.startMs));
+    host.appendChild(d);
   }
-  for (const [i, seg] of result.segments.entries()) {
-    const div = document.createElement("div");
-    div.className = "seg" + (seg.avgConfidence < 0.6 ? " low" : "");
-    div.dataset.start = seg.startMs;
-    div.dataset.end = seg.endMs;
-    div.innerHTML = `<time title="confiance ${(seg.avgConfidence * 100).toFixed(0)} %">${fmt(seg.startMs)}</time><span>${escapeHtml(seg.text)}</span>`;
-    div.querySelector("time").addEventListener("click", () => seek(seg.startMs));
-    host.appendChild(div);
-  }
-
-  const audioS = result.audioDurationMs / 1000;
-  const rtf = audioS / (result.processingMs / 1000);
   $("tStats").hidden = false;
-  $("tStats").innerHTML = `
-    <span>durée <b>${fmt(result.audioDurationMs)}</b></span>
-    <span>segments <b>${result.segments.length}</b></span>
-    <span>langue <b>${result.segments[0]?.lang ?? "?"}</b></span>
-    <span>transcrit en <b>${wallSeconds.toFixed(1)} s</b></span>
-    <span>soit <b>${rtf.toFixed(1)}×</b> le temps réel</span>
+  $("tStats").innerHTML = `<span>durée <b>${fmt(res.audioDurationMs)}</b></span>
+    <span>segments <b>${res.segments.length}</b></span>
+    <span>transcrit en <b>${wall.toFixed(1)} s</b></span>
+    <span>soit <b>${(res.audioDurationMs / res.processingMs).toFixed(1)}×</b> le temps réel</span>
     <span>coût <b>0,00 €</b></span>`;
 }
 
-function seek(ms) {
-  const p = $("player");
-  p.currentTime = ms / 1000;
-  p.play();
-}
-
+const seek = (ms) => { const p = $("player"); p.currentTime = ms / 1000; p.play(); };
 $("player").addEventListener("timeupdate", () => {
   const ms = $("player").currentTime * 1000;
-  for (const el of document.querySelectorAll(".seg")) {
+  for (const el of document.querySelectorAll(".seg"))
     el.classList.toggle("playing", ms >= +el.dataset.start && ms < +el.dataset.end);
-  }
 });
 
-// ---- notes ----
-$("notesBtn").addEventListener("click", async () => {
-  const btn = $("notesBtn");
-  btn.disabled = true;
-  btn.textContent = "génération…";
+// ------------------------------------------------------------------ documents
+const drop = $("drop");
+drop.addEventListener("click", () => $("fileInput").click());
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => {
+  e.preventDefault(); drop.classList.remove("over");
+  handleFiles([...e.dataTransfer.files]);
+});
+$("fileInput").addEventListener("change", (e) => handleFiles([...e.target.files]));
+
+$("pasteBtn").addEventListener("click", async () => {
+  const text = prompt("Colle le texte (plan du cours, énoncé, notes déjà prises) :");
+  if (text?.trim()) await addAttachment({ kind: "text", name: "texte collé", text });
+});
+
+async function handleFiles(files) {
+  for (const file of files) {
+    if (file.type.startsWith("image/")) {
+      const dataUrl = await new Promise((res) => {
+        const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(file);
+      });
+      await addAttachment({ kind: "image", name: file.name, dataUrl }, dataUrl);
+    } else {
+      await addAttachment({ kind: "text", name: file.name, text: await file.text() });
+    }
+  }
+}
+
+async function addAttachment(payload, preview) {
+  const card = document.createElement("div");
+  card.className = "att";
+  card.innerHTML = `<div class="top"><b>${esc(payload.name)}</b><span class="tag">lecture…</span></div>`;
+  $("attachments").appendChild(card);
   try {
-    const r = await fetch("/notes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ segments: state.segments }),
+    const r = await fetch("/attachment", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const res = await r.json();
+    if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
+    const index = state.attachments.length;
+    state.attachments.push({ name: res.name, text: res.text, kind: res.kind });
+    card.innerHTML = `<div class="top"><b>${esc(res.name)}</b>
+        <span class="tag">a${index} · ${res.kind === "image" ? "photo lue" : "texte"} · ${res.costEuros ?? ""}</span>
+        <button class="sm" data-i="${index}">retirer</button></div>
+      ${preview ? `<img src="${preview}" alt="">` : ""}
+      <pre>${esc(res.text.slice(0, 1400))}</pre>`;
+    card.querySelector("button").addEventListener("click", () => {
+      state.attachments[index] = null; card.remove(); refreshButtons();
     });
-    const payload = await r.json();
-    if (!r.ok) throw new Error(payload.error ?? `HTTP ${r.status}`);
-    renderNotes(payload);
+    refreshButtons();
   } catch (e) {
-    $("notes").innerHTML = `<div class="empty err">${escapeHtml(e.message)}</div>`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Générer les notes";
+    card.innerHTML = `<div class="top"><b>${esc(payload.name)}</b><span class="err">${esc(e.message)}</span></div>`;
   }
+}
+
+const liveAttachments = () => state.attachments.filter(Boolean);
+
+function refreshButtons() {
+  const has = state.segments.length > 0 || liveAttachments().length > 0;
+  $("notesBtn").disabled = !has;
+  $("diagBtn").disabled = !has;
+  $("saveBtn").disabled = !state.doc;
+}
+
+// ---------------------------------------------------------------------- notes
+$("notesBtn").addEventListener("click", async () => {
+  const btn = $("notesBtn"); btn.disabled = true; btn.textContent = "génération…";
+  $("notesErr").textContent = "";
+  try {
+    // §6.4 : ce que l'humain a écrit n'est jamais écrasé — on le renvoie au
+    // modèle pour qu'il complète autour au lieu de le refaire.
+    const keepEdited = (state.doc?.blocks ?? []).filter((b) => b.edited).map((b) => b.text ?? b.definition ?? "");
+    const r = await fetch("/notes", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ segments: state.segments, attachments: liveAttachments(), keepEdited }) });
+    const res = await r.json();
+    if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
+    const edited = (state.doc?.blocks ?? []).filter((b) => b.edited);
+    res.blocks = [...edited, ...res.blocks];
+    state.doc = res; renderNotes();
+  } catch (e) { $("notesErr").textContent = e.message; }
+  finally { btn.disabled = false; btn.textContent = "Générer les notes"; refreshButtons(); }
 });
 
-function anchorEl(anchor) {
-  if (!anchor) return "";
-  return `<span class="anchor" data-ms="${anchor.startMs}">↩ ${fmt(anchor.startMs)}</span>`;
+function anchorHtml(a) {
+  if (!a) return "";
+  if (a.kind === "attachment") return `<span class="anchor att" title="${esc((a.names || []).join(", "))}">🖼 ${esc((a.names || [])[0] ?? "document")}</span>`;
+  return `<span class="anchor" data-ms="${a.startMs}">↩ ${fmt(a.startMs)}</span>`;
 }
 
-function renderNotes(doc) {
-  const host = $("notes");
-  const parts = [`<h3>${escapeHtml(doc.title)}</h3>`, `<p>${escapeHtml(doc.summary)}</p>`];
+function blockHtml(b, i) {
+  const a = anchorHtml(b.anchor);
+  const cls = `blk${b.edited ? " edited" : ""}`;
+  const attrs = `class="${cls}" contenteditable="true" data-i="${i}"`;
+  if (b.type === "heading") return `<h4 ${attrs}>${esc(b.text)}</h4>${a}`;
+  if (b.type === "bullets") return `<ul ${attrs}>${b.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>${a}`;
+  if (b.type === "definition") return `<div class="def"><p ${attrs}><b>${esc(b.term)}</b> — ${esc(b.definition)}</p>${a}</div>`;
+  if (b.type === "callout") return `<div class="callout ${esc(b.kind)}"><span class="lbl">${esc(b.kind.replace("-", " "))}</span><span ${attrs}>${esc(b.text)}</span>${a}</div>`;
+  return `<p ${attrs}>${esc(b.text ?? "")}</p>${a}`;
+}
 
-  for (const b of doc.blocks) {
-    const a = anchorEl(b.anchor);
-    if (b.type === "heading") parts.push(`<h4>${escapeHtml(b.text)}${a}</h4>`);
-    else if (b.type === "paragraph") parts.push(`<p>${escapeHtml(b.text)}${a}</p>`);
-    else if (b.type === "bullets")
-      parts.push(`<ul>${b.items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>${a}`);
-    else if (b.type === "definition")
-      parts.push(`<div class="def"><b>${escapeHtml(b.term)}</b> — ${escapeHtml(b.definition)}${a}</div>`);
-    else if (b.type === "callout")
-      parts.push(`<div class="callout ${b.kind}"><span class="lbl">${b.kind.replace("-", " ")}</span>${escapeHtml(b.text)}${a}</div>`);
-  }
-
-  if (doc.glossary?.length) {
+function renderNotes() {
+  const d = state.doc, host = $("notes");
+  const parts = [`<h3 class="blk" contenteditable="true" data-i="title">${esc(d.title)}</h3>`,
+                 `<p class="blk" contenteditable="true" data-i="summary">${esc(d.summary)}</p>`];
+  d.blocks.forEach((b, i) => parts.push(blockHtml(b, i)));
+  if (d.glossary?.length) {
     parts.push(`<h4>Glossaire</h4>`);
-    for (const g of doc.glossary) parts.push(`<div class="def"><b>${escapeHtml(g.term)}</b> — ${escapeHtml(g.definition)}${anchorEl(g.anchor)}</div>`);
+    for (const g of d.glossary)
+      parts.push(`<div class="def"><b>${esc(g.term)}</b> — ${esc(g.definition)}${anchorHtml(g.anchor)}</div>`);
   }
-  if (doc.rejectedBlocks > 0) {
-    parts.push(`<p class="err">${doc.rejectedBlocks} bloc(s) écarté(s) : ancre vers la transcription invalide.</p>`);
-  }
-  parts.push(`<div class="stats"><span>modèle <b>${escapeHtml(doc.model)}</b></span><span>coût <b>${doc.costEuros}</b></span><span>en <b>${(doc.latencyMs / 1000).toFixed(1)} s</b></span></div>`);
-
+  if (d.rejectedBlocks > 0)
+    parts.push(`<p class="err">${d.rejectedBlocks} bloc(s) écarté(s) : la source citée ne correspond pas au contenu.</p>`);
+  if (d.fallbackNote) parts.push(`<p class="err">${esc(d.fallbackNote)}</p>`);
+  parts.push(`<div class="stats"><span>modèle <b>${esc(d.model)}</b></span>
+    <span>coût <b>${esc(d.costEuros)}</b></span><span>en <b>${(d.latencyMs / 1000).toFixed(1)} s</b></span>
+    <span>blocs <b>${d.blocks.length}</b></span></div>`);
   host.innerHTML = parts.join("");
-  for (const el of host.querySelectorAll(".anchor")) el.addEventListener("click", () => seek(+el.dataset.ms));
+
+  for (const el of host.querySelectorAll(".anchor[data-ms]"))
+    el.addEventListener("click", () => seek(+el.dataset.ms));
+
+  for (const el of host.querySelectorAll(".blk")) {
+    el.addEventListener("input", () => {
+      const i = el.dataset.i;
+      const text = el.innerText.trim();
+      if (i === "title") d.title = text;
+      else if (i === "summary") d.summary = text;
+      else {
+        const b = d.blocks[+i];
+        if (!b) return;
+        b.edited = true;
+        if (b.type === "bullets") b.items = [...el.querySelectorAll("li")].map((li) => li.innerText.trim());
+        else if (b.type === "definition") b.definition = text.replace(/^.*?—\s*/, "");
+        else b.text = text;
+        el.classList.add("edited");
+      }
+      markDirty();
+    });
+  }
+  updateEditHint(); markDirty();
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+function updateEditHint() {
+  const n = (state.doc?.blocks ?? []).filter((b) => b.edited).length;
+  $("editHint").textContent = n ? `— ${n} bloc(s) modifié(s), protégés en régénération` : "";
 }
+
+// ------------------------------------------------------------------- schémas
+$("diagBtn").addEventListener("click", async () => {
+  const instruction = prompt("Que veux-tu représenter ? (laisse vide pour laisser l'IA choisir)", "") ?? "";
+  const btn = $("diagBtn"); btn.disabled = true; btn.textContent = "schéma…";
+  try {
+    const context = state.doc
+      ? [state.doc.summary, ...state.doc.blocks.map((b) => b.text ?? `${b.term} : ${b.definition}`)].join("\n")
+      : state.segments.map((s) => s.text).join(" ");
+    const r = await fetch("/diagram", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ context: context.slice(0, 12000), instruction }) });
+    const res = await r.json();
+    if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
+    state.diagrams.push(res); await renderDiagram(res, state.diagrams.length - 1);
+    markDirty();
+  } catch (e) { $("notesErr").textContent = e.message; }
+  finally { btn.disabled = false; btn.textContent = "Faire un schéma"; refreshButtons(); }
+});
+
+async function renderDiagram(d, index) {
+  let card = document.getElementById(`diag-${index}`);
+  if (!card) {
+    card = document.createElement("div"); card.className = "diagram"; card.id = `diag-${index}`;
+    card.innerHTML = `<h4 style="margin:0 0 4px">${esc(d.title)}</h4>
+      <div class="cap">${esc(d.explanation)}</div>
+      <div class="render"></div>
+      <details><summary class="cap" style="cursor:pointer">Code Mermaid — modifiable</summary>
+      <textarea spellcheck="false"></textarea>
+      <button class="sm" style="margin-top:6px">Re-rendre</button></details>`;
+    $("diagrams").appendChild(card);
+    card.querySelector("textarea").value = d.mermaid;
+    card.querySelector("button").addEventListener("click", () => {
+      state.diagrams[index].mermaid = card.querySelector("textarea").value;
+      renderDiagram(state.diagrams[index], index); markDirty();
+    });
+  }
+  const target = card.querySelector(".render");
+  try {
+    const { svg } = await mermaid.render(`m${index}-${Date.now()}`, d.mermaid);
+    target.innerHTML = svg;
+  } catch (e) {
+    // Un petit modèle produit régulièrement du Mermaid légèrement invalide.
+    // On montre l'erreur ET le code, pour que ce soit corrigeable à la main.
+    target.innerHTML = `<div class="err">Mermaid n'a pas pu rendre ce schéma : ${esc(e.message?.split("\n")[0] ?? e)}</div>`;
+    card.querySelector("details").open = true;
+  }
+}
+
+// --------------------------------------------------------------- persistance
+function markDirty() {
+  state.dirty = true; $("saveBtn").disabled = false;
+  $("saveState").textContent = "modifications non enregistrées";
+  updateEditHint();
+}
+
+$("saveBtn").addEventListener("click", save);
+async function save() {
+  try {
+    await fetch("/save", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "default", doc: state.doc, diagrams: state.diagrams,
+                             attachments: liveAttachments(), segments: state.segments,
+                             savedAt: new Date().toISOString() }) });
+    state.dirty = false;
+    $("saveState").textContent = `enregistré à ${new Date().toLocaleTimeString("fr-FR")}`;
+    $("saveBtn").disabled = true;
+  } catch (e) { $("saveState").textContent = "échec de l'enregistrement"; }
+}
+
+addEventListener("beforeunload", (e) => { if (state.dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+(async function restore() {
+  try {
+    const saved = await (await fetch("/load?id=default")).json();
+    if (saved.empty) return;
+    state.segments = saved.segments ?? [];
+    state.attachments = saved.attachments ?? [];
+    state.doc = saved.doc ?? null;
+    state.diagrams = saved.diagrams ?? [];
+    if (state.segments.length)
+      renderTranscript({ segments: state.segments, audioDurationMs: state.segments.at(-1).endMs, processingMs: 1 }, 0);
+    for (const [i, a] of state.attachments.entries()) {
+      const c = document.createElement("div"); c.className = "att";
+      c.innerHTML = `<div class="top"><b>${esc(a.name)}</b><span class="tag">a${i} · restauré</span></div><pre>${esc(a.text.slice(0, 800))}</pre>`;
+      $("attachments").appendChild(c);
+    }
+    if (state.doc) renderNotes();
+    for (const [i, d] of state.diagrams.entries()) await renderDiagram(d, i);
+    state.dirty = false; $("saveBtn").disabled = true;
+    $("saveState").textContent = `restauré · ${saved.savedAt?.slice(11, 16) ?? ""}`;
+    refreshButtons();
+  } catch { /* pas de sauvegarde : premier lancement */ }
+})();
 </script>
 </body>
 </html>

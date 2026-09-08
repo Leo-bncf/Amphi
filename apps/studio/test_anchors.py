@@ -28,15 +28,22 @@ SEGMENTS = [
     {"text": "Ça veut dire que le lasso fait de la sélection de variables automatiquement.", "startMs": 11000, "endMs": 15000},
 ]
 
+ATTACHMENTS = [
+    {"name": "tableau.png", "text": "Ridge L2 : SSR + lambda * somme des beta au carre. Standardiser AVANT."},
+]
+
 FAILURES: list[str] = []
 
 
-def check(label: str, block: dict[str, object], expect_kept: bool) -> None:
-    anchor = verify_anchor(block, SEGMENTS)
+def check(label: str, block: dict[str, object], expect_kept: bool, expect_kind: str | None = None) -> None:
+    anchor = verify_anchor(block, SEGMENTS, ATTACHMENTS)
     kept = anchor is not None
     if kept != expect_kept:
         FAILURES.append(f"{label} — attendu {'gardé' if expect_kept else 'écarté'}, obtenu le contraire")
-    print(f"  {'GARDÉ ' if kept else 'ÉCARTÉ'}  {label}")
+    if kept and expect_kind and anchor["kind"] != expect_kind:
+        FAILURES.append(f"{label} — nature d'ancre {anchor['kind']}, attendu {expect_kind}")
+    kind = f" ({anchor['kind']})" if kept else ""
+    print(f"  {'GARDÉ ' if kept else 'ÉCARTÉ'}  {label}{kind}")
 
 
 print("Vérification d'ancrage :\n")
@@ -74,6 +81,33 @@ check(
 check(
     "identifiant malformé",
     {"type": "paragraph", "text": "Le lasso annule certains coefficients du modèle.", "sourceSegmentIds": ["segment-1"]},
+    expect_kept=False,
+)
+
+print("\nSources mixtes — transcription et photo du tableau :\n")
+
+check(
+    "bloc tiré de la seule photo, sans horodatage",
+    {"type": "paragraph", "text": "Il faut standardiser les variables avant d'appliquer la pénalité.",
+     "sourceAttachmentIds": ["a0"]},
+    expect_kept=True, expect_kind="attachment",
+)
+check(
+    "bloc citant l'oral ET le tableau — garde l'horodatage cliquable",
+    {"type": "paragraph", "text": "Le lasso met certains coefficients à zéro.",
+     "sourceSegmentIds": ["s1"], "sourceAttachmentIds": ["a0"]},
+    expect_kept=True, expect_kind="transcript",
+)
+check(
+    "hallucination citant une photo authentique",
+    {"type": "paragraph", "text": "Napoléon instaura le système métrique pendant la campagne égyptienne.",
+     "sourceAttachmentIds": ["a0"]},
+    expect_kept=False,
+)
+check(
+    "pièce jointe inexistante",
+    {"type": "paragraph", "text": "Il faut standardiser les variables avant la pénalité.",
+     "sourceAttachmentIds": ["a42"]},
     expect_kept=False,
 )
 

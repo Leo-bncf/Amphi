@@ -53,10 +53,14 @@ OUT_MILLICENTS = 0.60 * EUR_PER_USD * 1000 / 1_000_000
 
 SYSTEM_PROMPT = """Tu produis les notes de cours d'un étudiant à partir de la transcription d'une séance.
 
-La transcription est découpée en segments numérotés [s0], [s1], etc. RÈGLE ABSOLUE :
-chaque bloc que tu produis doit citer dans `sourceSegmentIds` les identifiants des
-segments dont il est tiré. Un bloc sans source vérifiable est rejeté et n'apparaîtra
-pas dans les notes de l'étudiant. Ne rédige donc rien qui ne soit dit dans la
+Tu reçois deux sortes de sources :
+- la TRANSCRIPTION, découpée en segments numérotés [s0], [s1]… ;
+- des DOCUMENTS numérotés [a0], [a1]… — photos du tableau, diapositives, notes collées.
+
+RÈGLE ABSOLUE : chaque bloc que tu produis cite ses sources, dans `sourceSegmentIds`
+pour la transcription ou dans `sourceAttachmentIds` pour les documents. Un bloc sans
+source vérifiable est rejeté et n'apparaîtra pas dans les notes de l'étudiant. Quand
+une photo du tableau confirme ou complète ce qui est dit à l'oral, cite les deux. Ne rédige donc rien qui ne soit dit dans la
 transcription : pas de complément de culture générale, pas de reformulation qui
 ajoute une information absente.
 
@@ -73,11 +77,35 @@ Réponds UNIQUEMENT par un objet JSON valide de cette forme :
     {"type":"paragraph","text":"...","sourceSegmentIds":["s1","s2"]},
     {"type":"bullets","items":["...","..."],"sourceSegmentIds":["s3"]},
     {"type":"definition","term":"...","definition":"...","sourceSegmentIds":["s4"]},
-    {"type":"callout","kind":"a-retenir","text":"...","sourceSegmentIds":["s5"]}
+    {"type":"callout","kind":"a-retenir","text":"...","sourceSegmentIds":["s5"]},
+    {"type":"paragraph","text":"...","sourceAttachmentIds":["a0"]}
   ],
   "glossary": [{"term":"...","definition":"...","sourceSegmentIds":["s4"]}]
 }
 `kind` vaut a-retenir, exemple, attention ou question-ouverte."""
+
+VISION_PROMPT = """Tu lis une photo prise pendant un cours : tableau, diapositive projetée, ou page de notes.
+
+Restitue son contenu en markdown, fidèlement et sans rien inventer :
+- les formules mathématiques en LaTeX entre $...$ ou $$...$$ ;
+- les schémas et graphiques : décris-les en une ou deux phrases entre crochets, par exemple [Schéma : pipeline ETL, trois étapes reliées par des flèches] ;
+- ce qui est illisible : écris [illisible] plutôt que de deviner.
+
+Ne commente pas, ne résume pas, n'ajoute aucune explication : tu transcris."""
+
+DIAGRAM_PROMPT = """Tu produis un diagramme Mermaid à partir d'un passage de cours.
+
+Choisis le type qui convient au contenu : flowchart pour un processus ou un pipeline,
+sequenceDiagram pour des échanges, classDiagram pour une structure, erDiagram pour un
+modèle de données, gantt pour un planning. Ne force pas un flowchart sur ce qui n'en est pas un.
+
+Contraintes de syntaxe, importantes car le rendu échoue sinon :
+- mets tout libellé contenant des espaces, accents ou ponctuation entre guillemets ;
+- pas de parenthèses ni de crochets nus dans les libellés ;
+- huit à quinze nœuds au maximum, un diagramme illisible ne sert à rien.
+
+Réponds uniquement par un objet JSON :
+{"mermaid": "flowchart TD\\n  A[\\"...\\"] --> B[\\"...\\"]", "title": "titre court", "explanation": "une phrase sur ce que montre le schéma"}"""
 
 STOPWORDS = {
     "le", "la", "les", "de", "des", "du", "un", "une", "et", "ou", "que", "qui",
@@ -92,40 +120,71 @@ def content_words(text: str) -> set[str]:
     return {w for w in re.sub(r"[^a-z0-9\s]", " ", text).split() if len(w) > 3 and w not in STOPWORDS}
 
 
-def verify_anchor(block: dict[str, Any], segments: list[dict[str, Any]]) -> dict[str, Any] | None:
+def block_text_of(block: dict[str, Any]) -> str:
+    parts = [str(v) for k, v in block.items() if k in ("text", "term", "definition")]
+    parts.extend(block.get("items", []) or [])
+    return " ".join(parts)
+
+
+def verify_anchor(
+    block: dict[str, Any],
+    segments: list[dict[str, Any]],
+    attachments: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
     """
     Vérification d'ancrage — §6.3.
 
-    Un modèle bon marché cite volontiers des segments plausibles mais faux. On
+    Un modèle bon marché cite volontiers des sources plausibles mais fausses. On
     contrôle donc deux choses : que les identifiants existent, et qu'il reste un
     recouvrement lexical entre le bloc et le texte cité. Sans ça, « traçable »
     ne voudrait rien dire de plus que « le modèle a écrit un numéro ».
+
+    Deux natures de source coexistent depuis l'ajout des photos : un segment de
+    transcription porte un horodatage cliquable, une pièce jointe n'en a pas.
+    Le bloc doit être rattaché à l'une ou à l'autre — jamais à rien.
     """
+    attachments = attachments or []
+
+    # Piste pièce jointe : une photo de tableau n'a pas d'horodatage, mais elle
+    # reste une source vérifiable.
+    att_indices = []
+    for aid in block.get("sourceAttachmentIds") or []:
+        match = re.fullmatch(r"a(\d+)", str(aid).strip())
+        if match and int(match.group(1)) < len(attachments):
+            att_indices.append(int(match.group(1)))
+
     ids = block.get("sourceSegmentIds") or []
     indices = []
     for sid in ids:
         match = re.fullmatch(r"s(\d+)", str(sid).strip())
         if match and int(match.group(1)) < len(segments):
             indices.append(int(match.group(1)))
-    if not indices:
+
+    if not indices and not att_indices:
         return None
 
-    cited = " ".join(segments[i]["text"] for i in indices)
-    block_text = " ".join(
-        str(v) for k, v in block.items() if k in ("text", "term", "definition")
-    ) + " ".join(block.get("items", []))
-
-    produced = content_words(block_text)
+    # Un bloc peut citer l'oral ET le tableau — c'est même le cas le plus utile,
+    # quand la photo confirme une formule dictée. Le recouvrement se vérifie sur
+    # l'union des sources, et l'ancre garde l'horodatage dès qu'il y en a un.
+    cited = " ".join(
+        [segments[i]["text"] for i in indices] + [attachments[i]["text"] for i in att_indices]
+    )
+    produced = content_words(block_text_of(block))
     source = content_words(cited)
     # Un titre court peut légitimement ne partager aucun mot plein : on ne
     # l'exige qu'au-delà de quelques mots de contenu.
     if len(produced) >= 4 and len(produced & source) == 0:
         return None
 
+    names = [attachments[i]["name"] for i in att_indices]
+    if not indices:
+        return {"kind": "attachment", "attachmentIds": [f"a{i}" for i in att_indices], "names": names}
     return {
+        "kind": "transcript",
         "segmentIds": [f"s{i}" for i in indices],
         "startMs": min(segments[i]["startMs"] for i in indices),
         "endMs": max(segments[i]["endMs"] for i in indices),
+        "names": names,
     }
 
 
@@ -180,6 +239,66 @@ def generate_local(transcript: str) -> tuple[dict[str, Any], dict[str, int], flo
     return json.loads(text[start : end + 1]), {"prompt_tokens": 0, "completion_tokens": 0}, latency_ms
 
 
+def mistral_chat(
+    api_key: str, messages: list[dict[str, Any]], *, model: str | None = None, max_tokens: int = 6000
+) -> tuple[dict[str, Any], dict[str, int], float]:
+    """Appel générique. `messages` peut contenir du texte et des images."""
+    body = json.dumps(
+        {
+            "model": model or MISTRAL_MODEL,
+            "messages": messages,
+            "response_format": {"type": "json_object"},
+            "temperature": 0.2,
+            "max_tokens": max_tokens,
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        MISTRAL_URL,
+        data=body,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+    )
+    started = time.perf_counter()
+    with urllib.request.urlopen(request, timeout=240) as response:
+        payload = json.loads(response.read())
+    latency_ms = (time.perf_counter() - started) * 1000
+    content = payload["choices"][0]["message"]["content"]
+    return json.loads(content), payload.get("usage", {}), latency_ms
+
+
+def mistral_vision_text(api_key: str, data_url: str) -> tuple[str, dict[str, int], float]:
+    """Photo du tableau ou de diapositive → markdown. Sortie libre, pas de JSON."""
+    body = json.dumps(
+        {
+            "model": MISTRAL_MODEL,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": VISION_PROMPT},
+                        {"type": "image_url", "image_url": data_url},
+                    ],
+                }
+            ],
+            "temperature": 0.1,
+            "max_tokens": 3000,
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        MISTRAL_URL,
+        data=body,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+    )
+    started = time.perf_counter()
+    with urllib.request.urlopen(request, timeout=240) as response:
+        payload = json.loads(response.read())
+    latency_ms = (time.perf_counter() - started) * 1000
+    return (
+        payload["choices"][0]["message"]["content"].strip(),
+        payload.get("usage", {}),
+        latency_ms,
+    )
+
+
 def call_mistral(api_key: str, transcript: str) -> tuple[dict[str, Any], dict[str, int], float]:
     body = json.dumps(
         {
@@ -209,86 +328,183 @@ def call_mistral(api_key: str, transcript: str) -> tuple[dict[str, Any], dict[st
     return json.loads(content), usage, latency_ms
 
 
+DATA_DIR = STUDIO_DIR.parent.parent / "data" / "studio"
+
+
 class StudioHandler(AsrHandler):
-    """Étend le serveur ASR : sert l'interface et ajoute la génération de notes."""
+    """Étend le serveur ASR : sert l'interface, les pièces jointes, les notes et les schémas."""
+
+    def _read_json(self) -> Any:
+        length = int(self.headers.get("Content-Length") or 0)
+        return json.loads(self.rfile.read(length)) if length else {}
+
+    def _api_key(self) -> str:
+        return os.environ.get("MISTRAL_API_KEY", "")
+
+    # ------------------------------------------------------------------ GET
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path in ("/", "/index.html"):
-            html = (STUDIO_DIR / "ui" / "index.html").read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(html)))
-            self.end_headers()
-            self.wfile.write(html)
+            self._send_file(STUDIO_DIR / "ui" / "index.html", "text/html; charset=utf-8")
+            return
+        if self.path == "/vendor/mermaid.min.js":
+            self._send_file(STUDIO_DIR / "ui" / "vendor" / "mermaid.min.js", "application/javascript")
+            return
+        if self.path.startswith("/load"):
+            doc_id = self.path.partition("?id=")[2] or "default"
+            path = DATA_DIR / f"{re.sub(r'[^a-zA-Z0-9_-]', '', doc_id)}.json"
+            self._send(200, json.loads(path.read_text("utf-8")) if path.exists() else {"empty": True})
             return
         super().do_GET()
 
+    def _send_file(self, path: Path, content_type: str) -> None:
+        if not path.exists():
+            self._send(404, {"error": f"{path.name} introuvable"})
+            return
+        blob = path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(blob)))
+        self.end_headers()
+        self.wfile.write(blob)
+
+    # ----------------------------------------------------------------- POST
+
     def do_POST(self) -> None:  # noqa: N802
-        if self.path != "/notes":
+        routes = {
+            "/notes": self.handle_notes,
+            "/attachment": self.handle_attachment,
+            "/diagram": self.handle_diagram,
+            "/save": self.handle_save,
+        }
+        handler = routes.get(self.path)
+        if handler is None:
             super().do_POST()
             return
-
-        length = int(self.headers.get("Content-Length") or 0)
         try:
-            segments = json.loads(self.rfile.read(length))["segments"]
-        except (ValueError, KeyError) as exc:
-            self._send(400, {"error": f"corps invalide : {exc}"})
+            handler()
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")[:250]
+            hint = (
+                " La clé est valide mais le plan du compte n'est pas actif : vérifie ton "
+                "numéro sur console.mistral.ai."
+                if exc.code == 429
+                else ""
+            )
+            self._send(502, {"error": f"Mistral HTTP {exc.code} : {detail}{hint}"})
+        except ValueError as exc:
+            self._send(400, {"error": str(exc)})
+        except Exception as exc:  # noqa: BLE001
+            LOG.exception("échec sur %s", self.path)
+            self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
+
+    # ---------------------------------------------------------- pièces jointes
+
+    def handle_attachment(self) -> None:
+        """
+        Photo du tableau ou texte collé → source utilisable par la génération.
+
+        Le texte extrait devient une source citable au même titre qu'un segment
+        de transcription : un bloc de notes tiré d'une photo reste vérifiable,
+        il renvoie simplement à l'image plutôt qu'à un horodatage.
+        """
+        payload = self._read_json()
+        kind = payload.get("kind")
+        name = str(payload.get("name") or "sans-nom")[:120]
+
+        if kind == "text":
+            text = str(payload.get("text") or "").strip()
+            if text == "":
+                raise ValueError("texte vide")
+            self._send(200, {"kind": "text", "name": name, "text": text, "costEuros": "0,0000 €"})
             return
 
-        if not segments:
-            self._send(400, {"error": "aucun segment à résumer"})
-            return
+        if kind != "image":
+            raise ValueError("kind doit valoir 'image' ou 'text'")
 
-        transcript = "\n".join(f"[s{i}] {s['text']}" for i, s in enumerate(segments))
+        data_url = str(payload.get("dataUrl") or "")
+        if not data_url.startswith("data:image/"):
+            raise ValueError("dataUrl doit être une image en base64")
 
-        # Ordre de préférence : Mistral s'il répond, sinon le modèle local. Un 429
-        # de Mistral n'est pas une panne du produit — c'est un basculement.
-        api_key = os.environ.get("MISTRAL_API_KEY", "")
-        engine = "aucun"
+        api_key = self._api_key()
+        if api_key == "":
+            raise ValueError("MISTRAL_API_KEY absente : la lecture des photos en a besoin")
+
+        text, usage, latency_ms = mistral_vision_text(api_key, data_url)
+        cost = usage.get("prompt_tokens", 0) * IN_MILLICENTS + usage.get("completion_tokens", 0) * OUT_MILLICENTS
+        self._send(
+            200,
+            {
+                "kind": "image",
+                "name": name,
+                "text": text,
+                "costEuros": f"{cost / 1000:.4f} €",
+                "latencyMs": round(latency_ms),
+                "usage": usage,
+            },
+        )
+
+    # ------------------------------------------------------------------ notes
+
+    def handle_notes(self) -> None:
+        payload = self._read_json()
+        segments = payload.get("segments") or []
+        attachments = payload.get("attachments") or []
+        # §6.4 : une génération ne réécrit jamais ce qu'un humain a touché.
+        keep = payload.get("keepEdited") or []
+
+        if not segments and not attachments:
+            raise ValueError("ni transcription ni pièce jointe : rien à résumer")
+
+        parts = []
+        if segments:
+            parts.append("TRANSCRIPTION DE LA SÉANCE\n" + "\n".join(f"[s{i}] {s['text']}" for i, s in enumerate(segments)))
+        if attachments:
+            parts.append(
+                "DOCUMENTS FOURNIS — photos du tableau, diapositives, notes collées\n"
+                + "\n\n".join(f"[a{i}] {a['name']}\n{a['text']}" for i, a in enumerate(attachments))
+            )
+        if keep:
+            parts.append(
+                "BLOCS DÉJÀ RÉDIGÉS PAR L'ÉTUDIANT — ne les reprends pas, complète autour :\n"
+                + "\n".join(f"- {b}" for b in keep[:40])
+            )
+
+        api_key = self._api_key()
+        engine, problems = "aucun", []
         doc = usage = None
         latency_ms = 0.0
-        problems: list[str] = []
 
         if api_key != "":
             try:
-                doc, usage, latency_ms = call_mistral(api_key, transcript)
+                doc, usage, latency_ms = mistral_chat(
+                    api_key,
+                    [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": "\n\n".join(parts)},
+                    ],
+                )
                 engine = MISTRAL_MODEL
             except urllib.error.HTTPError as exc:
                 detail = exc.read().decode("utf-8", "replace")[:200]
-                if exc.code == 429:
-                    problems.append(
-                        "Mistral refuse l'inférence (429). La clé est valide mais le plan "
-                        "n'est pas actif : vérifie ton numéro de téléphone sur console.mistral.ai."
-                    )
-                else:
-                    problems.append(f"Mistral HTTP {exc.code} : {detail}")
-            except Exception as exc:  # noqa: BLE001
-                problems.append(f"Mistral : {type(exc).__name__} {exc}")
+                problems.append(
+                    "Mistral refuse l'inférence (429) : plan du compte inactif."
+                    if exc.code == 429
+                    else f"Mistral HTTP {exc.code} : {detail}"
+                )
         else:
             problems.append("MISTRAL_API_KEY absente.")
 
         if doc is None:
             if not local_llm_available():
-                self._send(
-                    503,
-                    {
-                        "error": " ".join(problems)
-                        + f" Et le modèle local ({LOCAL_LLM_MODEL}) n'est pas encore téléchargé."
-                    },
-                )
+                self._send(503, {"error": " ".join(problems) + f" Modèle local ({LOCAL_LLM_MODEL}) pas encore téléchargé."})
                 return
-            try:
-                doc, usage, latency_ms = generate_local(transcript)
-                engine = LOCAL_LLM_MODEL.split("/")[-1] + " (local)"
-            except Exception as exc:  # noqa: BLE001
-                LOG.exception("génération locale")
-                self._send(500, {"error": " ".join(problems) + f" Modèle local : {exc}"})
-                return
+            doc, usage, latency_ms = generate_local("\n\n".join(parts))
+            engine = LOCAL_LLM_MODEL.split("/")[-1] + " (local)"
 
-        # Ancrage vérifié bloc par bloc. Ce qui ne passe pas n'est pas affiché.
         kept, rejected = [], 0
         for block in doc.get("blocks", []):
-            anchor = verify_anchor(block, segments)
+            anchor = verify_anchor(block, segments, attachments)
             if anchor is None:
                 rejected += 1
                 continue
@@ -297,13 +513,12 @@ class StudioHandler(AsrHandler):
 
         glossary = []
         for entry in doc.get("glossary", []):
-            anchor = verify_anchor(entry, segments)
+            anchor = verify_anchor(entry, segments, attachments)
             if anchor is not None:
                 entry["anchor"] = anchor
                 glossary.append(entry)
 
         cost = usage.get("prompt_tokens", 0) * IN_MILLICENTS + usage.get("completion_tokens", 0) * OUT_MILLICENTS
-
         self._send(
             200,
             {
@@ -314,11 +529,57 @@ class StudioHandler(AsrHandler):
                 "rejectedBlocks": rejected,
                 "model": engine,
                 "costEuros": "0,0000 € (local)" if usage.get("prompt_tokens", 0) == 0 else f"{cost / 1000:.4f} €",
-                "fallbackNote": " ".join(problems) if problems and engine != MISTRAL_MODEL else None,
                 "latencyMs": round(latency_ms),
                 "usage": usage,
+                "fallbackNote": " ".join(problems) if problems and engine != MISTRAL_MODEL else None,
             },
         )
+
+    # ---------------------------------------------------------------- schémas
+
+    def handle_diagram(self) -> None:
+        """Commande /diagram du §3.6 : un passage de cours → un Mermaid."""
+        payload = self._read_json()
+        context = str(payload.get("context") or "").strip()
+        instruction = str(payload.get("instruction") or "").strip()
+        if context == "":
+            raise ValueError("aucun passage fourni")
+
+        api_key = self._api_key()
+        if api_key == "":
+            raise ValueError("MISTRAL_API_KEY absente : la génération de schémas en a besoin")
+
+        user = context if instruction == "" else f"Consigne : {instruction}\n\nPassage :\n{context}"
+        doc, usage, latency_ms = mistral_chat(
+            api_key,
+            [{"role": "system", "content": DIAGRAM_PROMPT}, {"role": "user", "content": user}],
+            max_tokens=1500,
+        )
+        cost = usage.get("prompt_tokens", 0) * IN_MILLICENTS + usage.get("completion_tokens", 0) * OUT_MILLICENTS
+        self._send(
+            200,
+            {
+                "mermaid": doc.get("mermaid", ""),
+                "title": doc.get("title", "Schéma"),
+                "explanation": doc.get("explanation", ""),
+                "costEuros": f"{cost / 1000:.4f} €",
+                "latencyMs": round(latency_ms),
+            },
+        )
+
+    # ------------------------------------------------------------ persistance
+
+    def handle_save(self) -> None:
+        payload = self._read_json()
+        doc_id = re.sub(r"[^a-zA-Z0-9_-]", "", str(payload.get("id") or "default")) or "default"
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        path = DATA_DIR / f"{doc_id}.json"
+        # Écriture atomique : une sauvegarde interrompue ne doit pas laisser un
+        # document tronqué à la place de notes de cours.
+        temp = path.with_suffix(".tmp")
+        temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        temp.replace(path)
+        self._send(200, {"ok": True, "id": doc_id, "path": str(path)})
 
 
 def load_dotenv() -> None:

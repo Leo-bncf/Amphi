@@ -11,7 +11,8 @@ Conçu pour une promo — 10 à 30 personnes, ~30 h de cours par semaine — pou
 | Jalon | Contenu | État |
 |---|---|---|
 | M0 | Architecture, coûts, décisions | ✅ validé |
-| **M1** | Enregistrement mono-appareil → ASR → notes → lecture horodatée | 🚧 en cours |
+| **M1** | Enregistrement → ASR → notes ancrées → lecture horodatée | ✅ démontrable |
+| M1+ | Import photos/documents, notes éditables, diagrammes Mermaid | ✅ démontrable |
 | M2 | Édition collaborative, Mermaid, Excalidraw | à venir |
 | M3 | Multi-appareils, consensus, affichage des désaccords | à venir |
 | M4 | Import ICS, recherche sémantique | à venir |
@@ -37,6 +38,20 @@ Aucun Homebrew requis : le worker ASR passe par MLX, qui s'installe avec pip et 
 pnpm install
 pnpm typecheck
 pnpm test
+```
+
+### L'app locale
+
+```bash
+./bench/.venv/bin/python apps/studio/server.py     # → http://127.0.0.1:8765
+```
+
+Enregistrement micro, transcription locale avec horodatages cliquables, import de photos du tableau et de documents, notes éditables et diagrammes Mermaid. Aucun Docker, aucune base : tout tourne sur la machine.
+
+La clé `MISTRAL_API_KEY` va dans un `.env` à la racine (non suivi par git). Sans elle la transcription marche quand même ; les notes basculent sur un modèle MLX local s'il est téléchargé.
+
+```bash
+./bench/.venv/bin/python apps/studio/test_anchors.py   # 11 cas sur la vérification d'ancrage
 ```
 
 ### Banc de mesure Whisper

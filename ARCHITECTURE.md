@@ -508,6 +508,18 @@ Le vrai coût est ailleurs : 130 h de cours à 3 flux font **390 h d'audio par m
 
 Second résultat, inattendu : les horodatages au mot sont **gratuits**. Je m'attendais à ce qu'ils coûtent cher, puisqu'ils demandent une passe d'alignement supplémentaire. On les active donc partout — le module de consensus et l'ancrage des notes en dépendent tous les deux.
 
+#### Documents et schémas — mesuré
+
+| Fonction | Mesure |
+|---|---|
+| Photo de tableau → markdown + LaTeX | **0,0002 €**, 1,3 s |
+| Diagramme Mermaid depuis la transcription | **0,0005 €**, 3,0 s |
+| Notes avec transcription + document | 0,0022 €, 26 blocs, 0 écarté |
+
+La lecture d'image restitue les formules en LaTeX et décrit les schémas entre crochets plutôt que de les inventer. Le test qui compte est celui du **document contenant ce que le prof n'a pas dit** : un seuil de corrélation présent uniquement dans la diapositive est repris dans les notes et ancré sur elle, pas sur l'oral. Sans ça, l'import de documents ne serait qu'un décor.
+
+**Ancrage à sources mixtes.** Un bloc peut citer l'oral et le tableau — c'est même le cas le plus utile, quand la photo confirme une formule dictée. L'ancre garde alors l'horodatage cliquable et mentionne la photo. Un bloc issu de la seule photo n'a pas d'horodatage : il renvoie à l'image. Onze cas de test couvrent les combinaisons, dont l'hallucination citant une photo authentique.
+
 #### Génération des notes — mesuré de bout en bout
 
 Même séance, chaîne complète : transcription MLX locale → Mistral Small 4 → notes ancrées.
