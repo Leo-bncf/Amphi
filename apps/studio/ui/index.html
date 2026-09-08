@@ -166,6 +166,8 @@ label.toggle { display: inline-flex; align-items: center; gap: var(--s-2xs); fon
             text-overflow: ellipsis; white-space: nowrap; }
 .vrow .vb { font-family: var(--font-data); font-size: var(--t-xs); color: var(--neutral); text-align: right; }
 
+.sheetlet .hintline { font-family: var(--font-data); font-size: var(--t-xs); color: var(--neutral);
+                      min-height: 1.2em; }
 .sheetlet .ma { display: flex; gap: var(--s-xs); justify-content: flex-end; margin-top: var(--s-xs); }
 .doc .mv { position: absolute; top: var(--s-xs); right: 30px; opacity: 0; }
 .doc:hover .mv { opacity: 1; }
@@ -819,17 +821,73 @@ async function openDoc(id) {
   applySolo(true);
 }
 
-$("newBtn").onclick = () => {
-  Object.assign(state, { id: null, segments: [], attachments: [], doc: null, diagrams: [], images: [], parts: [] });
-  $("parts").innerHTML = ""; $("timer").textContent = "00:00";
-  $("docTitle").value = ""; $("attachments").innerHTML = "";
-  // La matière et le chapitre restent : on enchaîne en général sur le même cours.
-  $("transcript").innerHTML = `<div class="empty">Rien encore.</div>`; $("tStats").hidden = true;
-  $("sheet").innerHTML = `<div class="empty">Enregistre une séance ou dépose un document, puis génère les notes.</div>`;
-  $("player").hidden = true; $("player").removeAttribute("data-url");
-  updateRecStatus(); $("saveState").textContent = ""; refresh(); show("ses");
-  applySolo(false);
-};
+/**
+ * Nouvelle séance : on choisit son emplacement AVANT de l'enregistrer.
+ *
+ * Ranger après coup marchait, mais ça produisait des séances orphelines qu'on
+ * oubliait de classer. Et comme dans un explorateur de fichiers, créer depuis
+ * un dossier ouvert propose ce dossier par défaut.
+ */
+$("newBtn").onclick = () => openNew();
+
+function openNew() {
+  const courses = [...new Set(lib.docs.map((d) => (d.course || "").trim()).filter(Boolean))].sort();
+  const chaptersOf = (course) => [...new Set(lib.docs
+    .filter((d) => !course || (d.course || "").trim() === course)
+    .map((d) => (d.chapter || "").trim()).filter(Boolean))].sort();
+
+  // Le dossier ouvert sert de proposition — « nouveau fichier ici ».
+  const preCourse = lib.course && lib.course !== "Sans matière" ? lib.course : "";
+  const preChapter = lib.chapter && lib.chapter !== "Sans chapitre" ? lib.chapter : "";
+
+  const back = document.createElement("div"); back.className = "modal";
+  back.innerHTML = `<div class="sheetlet">
+    <div class="mt">Nouvelle séance</div>
+    <div class="mn">Où la ranger ?</div>
+    <label>Matière<input id="nC" list="nCl" value="${esc(preCourse)}" placeholder="Business, Mathématiques…" autocomplete="off"></label>
+    <datalist id="nCl">${courses.map((c) => `<option value="${esc(c)}">`).join("")}</datalist>
+    <label>Chapitre<input id="nH" list="nHl" value="${esc(preChapter)}" placeholder="Chapitre 3, Semaine 5…" autocomplete="off"></label>
+    <datalist id="nHl"></datalist>
+    <label>Titre de la séance<input id="nT" placeholder="laisse vide, l'IA le proposera" autocomplete="off"></label>
+    <div class="hintline" id="nHint"></div>
+    <div class="ma"><button id="nX">Annuler</button><button id="nOk" class="primary">Créer</button></div>
+  </div>`;
+  document.body.appendChild(back);
+
+  const cIn = back.querySelector("#nC"), hIn = back.querySelector("#nH"), list = back.querySelector("#nHl");
+  // Les chapitres proposés dépendent de la matière saisie : proposer ceux d'un
+  // autre cours ne ferait que créer des doublons.
+  const refreshChapters = () => {
+    list.innerHTML = chaptersOf(cIn.value.trim()).map((c) => `<option value="${esc(c)}">`).join("");
+    const known = courses.includes(cIn.value.trim());
+    back.querySelector("#nHint").textContent = !cIn.value.trim() ? "Sans matière, la séance restera à la racine."
+      : known ? `Matière existante — ${chaptersOf(cIn.value.trim()).length} chapitre(s) déjà dedans.`
+      : "Nouvelle matière : elle sera créée.";
+  };
+  cIn.addEventListener("input", refreshChapters);
+  refreshChapters();
+
+  const close = () => back.remove();
+  back.onclick = (e) => { if (e.target === back) close(); };
+  back.querySelector("#nX").onclick = close;
+  back.addEventListener("keydown", (e) => { if (e.key === "Enter") back.querySelector("#nOk").click(); });
+  cIn.focus(); cIn.select();
+
+  back.querySelector("#nOk").onclick = () => {
+    Object.assign(state, { id: null, segments: [], attachments: [], doc: null,
+                           diagrams: [], images: [], parts: [] });
+    $("docCourse").value = cIn.value.trim();
+    $("docChapter").value = hIn.value.trim();
+    $("docTitle").value = back.querySelector("#nT").value.trim();
+    $("attachments").innerHTML = ""; $("parts").innerHTML = "";
+    $("transcript").innerHTML = `<div class="empty">Rien encore.</div>`; $("tStats").hidden = true;
+    $("sheet").innerHTML = `<div class="empty"><b>Séance prête.</b>
+      Appuie sur le bouton rouge pour enregistrer le cours, ou dépose un document à gauche.</div>`;
+    $("player").hidden = true; $("player").removeAttribute("data-url");
+    $("timer").textContent = "00:00"; $("saveState").textContent = "";
+    close(); updateRecStatus(); refresh(); show("ses"); applySolo(false);
+  };
+}
 
 // ------------------------------------------------------------ capture
 //
