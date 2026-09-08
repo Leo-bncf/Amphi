@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Amphi — banc Whisper navigateur</title>
+<style>
+  :root {
+    --paper: oklch(97% 0.010 75); --ink: oklch(21% 0.014 60); --muted: oklch(46% 0.013 65);
+    --rule: oklch(83% 0.012 75); --accent: oklch(44% 0.145 25); --tint: oklch(95% 0.022 30);
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: oklch(15% 0.010 75); --ink: oklch(93% 0.008 80); --muted: oklch(72% 0.012 70);
+            --rule: oklch(33% 0.012 75); --accent: oklch(68% 0.125 32); --tint: oklch(24% 0.035 30); }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px; background: var(--paper); color: var(--ink);
+         font: 15px/1.6 var(--sans); max-width: 820px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .lede { color: var(--muted); margin: 0 0 22px; font-size: 14px; }
+  fieldset { border: 1px solid var(--rule); padding: 14px 16px; margin: 0 0 16px; }
+  legend { font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+           text-transform: uppercase; color: var(--accent); padding: 0 6px; }
+  label { display: block; margin: 6px 0; font-size: 14px; }
+  select, button { font: inherit; padding: 7px 12px; border: 1px solid var(--rule);
+                   background: var(--paper); color: var(--ink); border-radius: 3px; }
+  button.go { background: var(--accent); border-color: var(--accent); color: var(--paper);
+              font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .4; }
+  #log { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; line-height: 1.55;
+         border: 1px solid var(--rule); padding: 12px; min-height: 160px; max-height: 380px;
+         overflow-y: auto; background: var(--tint); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rule); }
+  th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+       letter-spacing: .1em; color: var(--muted); font-weight: 600; }
+  td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+  .verdict { font-weight: 700; }
+  .ok { color: oklch(46% 0.095 148); } .ko { color: var(--accent); }
+</style>
+</head>
+<body>
+<h1>Whisper dans le navigateur — banc de mesure</h1>
+<p class="lede">
+  Décide si la transcription peut se faire côté client. Le seul chiffre qui compte est le
+  <b>facteur temps réel</b> : au-dessus de 1×, le navigateur transcrit plus vite que le cours
+  ne se déroule. En dessous, la file ne se vide jamais.
+  Référence : le moteur natif MLX atteint <b>9,9×</b> sur ce Mac.
+</p>
+
+<fieldset>
+  <legend>Machine</legend>
+  <div id="env"></div>
+</fieldset>
+
+<fieldset>
+  <legend>Essai</legend>
+  <label>Modèle
+    <select id="model">
+      <option value="onnx-community/whisper-large-v3-turbo_timestamped">large-v3-turbo — qualité de référence, ~800 Mo</option>
+      <option value="onnx-community/whisper-small">small — compromis, ~250 Mo</option>
+      <option value="onnx-community/whisper-base_timestamped" selected>base — rapide, qualité faible, ~80 Mo</option>
+    </select>
+  </label>
+  <label>Accélération
+    <select id="device"><option value="webgpu">WebGPU</option><option value="wasm">WASM (référence basse)</option></select>
+  </label>
+  <label>Audio
+    <select id="audio">
+      <option value="/bench-audio/cours-regularisation.wav">cours de test — 5 min 31</option>
+    </select>
+  </label>
+  <p style="margin:12px 0 0"><button class="go" id="run">Lancer la mesure</button></p>
+</fieldset>
+
+<fieldset>
+  <legend>Résultats</legend>
+  <table id="results"><thead><tr><th>Modèle</th><th>Accél.</th><th class="n">Chargement</th>
+    <th class="n">Transcription</th><th class="n">×&nbsp;temps réel</th><th>Verdict</th></tr></thead><tbody></tbody></table>
+</fieldset>
+
+<fieldset><legend>Journal</legend><div id="log">prêt.</div></fieldset>
+
+<script type="module">
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/+esm";
+
+const $ = (id) => document.getElementById(id);
+const log = (m) => { $("log").textContent += "\n" + m; $("log").scrollTop = 1e6; };
+
+// Diagnostic machine : sans WebGPU, la mesure ne veut rien dire.
+(async () => {
+  const bits = [];
+  const hasGpu = "gpu" in navigator;
+  bits.push(`WebGPU exposé : ${hasGpu ? "oui" : "NON — le navigateur retombera sur WASM"}`);
+  if (hasGpu) {
+    try {
+      const adapter = await navigator.gpu.requestAdapter();
+      const info = adapter?.info ?? {};
+      bits.push(`adaptateur : ${info.vendor ?? "?"} ${info.architecture ?? ""} ${info.description ?? ""}`.trim());
+      bits.push(`limite mémoire tampon : ${((adapter?.limits?.maxBufferSize ?? 0) / 1073741824).toFixed(1)} Go`);
+    } catch (e) { bits.push(`adaptateur indisponible : ${e.message}`); }
+  }
+  bits.push(`cœurs logiques : ${navigator.hardwareConcurrency ?? "?"}`);
+  bits.push(`mémoire annoncée : ${navigator.deviceMemory ? navigator.deviceMemory + " Go" : "non exposée"}`);
+  $("env").innerHTML = bits.map((b) => `<div style="font-family:var(--mono);font-size:12px">${b}</div>`).join("");
+})();
+
+async function decodeWav(url) {
+  const buf = await (await fetch(url)).arrayBuffer();
+  const ctx = new AudioContext({ sampleRate: 16000 });
+  const audio = await ctx.decodeAudioData(buf);
+  await ctx.close();
+  return { pcm: audio.getChannelData(0), seconds: audio.duration };
+}
+
+$("run").onclick = async () => {
+  const model = $("model").value, device = $("device").value;
+  $("run").disabled = true;
+  try {
+    log(`\n── ${model.split("/").pop()} · ${device}`);
+    const { pcm, seconds } = await decodeWav($("audio").value);
+    log(`audio : ${seconds.toFixed(1)} s`);
+
+    // Chargement : téléchargement + compilation des shaders. Coût unique par
+    // machine, le modèle reste ensuite dans le cache du navigateur.
+    const t0 = performance.now();
+    let lastPct = -1;
+    const asr = await pipeline("automatic-speech-recognition", model, {
+      device,
+      dtype: device === "webgpu" ? { encoder_model: "fp16", decoder_model_merged: "q4" } : "q8",
+      progress_callback: (p) => {
+        if (p.status !== "progress") return;
+        const pct = Math.floor(p.progress ?? 0);
+        if (pct >= lastPct + 20) { lastPct = pct; log(`  chargement ${p.file?.split("/").pop() ?? ""} ${pct} %`); }
+      },
+    });
+    const loadS = (performance.now() - t0) / 1000;
+    log(`chargé en ${loadS.toFixed(1)} s`);
+
+    const t1 = performance.now();
+    const out = await asr(pcm, { chunk_length_s: 30, stride_length_s: 5, language: "fr", return_timestamps: true });
+    const runS = (performance.now() - t1) / 1000;
+    const rtf = seconds / runS;
+
+    const verdict = rtf >= 3 ? ["tient", "ok"] : rtf >= 1 ? ["juste — pas de marge", "ko"] : ["insuffisant", "ko"];
+    log(`transcrit en ${runS.toFixed(1)} s → ${rtf.toFixed(2)}× le temps réel — ${verdict[0]}`);
+    log(`extrait : ${(out.text ?? "").trim().slice(0, 130)}…`);
+
+    const row = $("results").querySelector("tbody").insertRow();
+    row.innerHTML = `<td>${model.split("/").pop()}</td><td>${device}</td>
+      <td class="n">${loadS.toFixed(0)} s</td><td class="n">${runS.toFixed(0)} s</td>
+      <td class="n">${rtf.toFixed(2)}×</td>
+      <td class="verdict ${verdict[1]}">${verdict[0]}</td>`;
+  } catch (e) {
+    log(`ÉCHEC : ${e.message}`);
+  } finally { $("run").disabled = false; }
+};
+</script>
+</body>
+</html>

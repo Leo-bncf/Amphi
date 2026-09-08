@@ -1099,6 +1099,16 @@ class StudioHandler(AsrHandler):
                                 "title": doc.get("title"), "blocks": len(doc.get("blocks") or [])})
             self._send(200, {"versions": out})
             return
+        # Banc de mesure : décide si la transcription peut passer côté navigateur.
+        if self.path in ("/bench", "/bench/"):
+            self._send_file(STUDIO_DIR.parent.parent / "bench" / "webgpu" / "index.html",
+                            "text/html; charset=utf-8")
+            return
+        if self.path.startswith("/bench-audio/"):
+            name = re.sub(r"[^0-9a-zA-Z._-]", "", self.path[len("/bench-audio/"):])
+            self._send_file(STUDIO_DIR.parent.parent / "bench" / "fixtures" / name,
+                            "audio/wav", cache="private, max-age=3600")
+            return
         if self.path.startswith("/lexicon"):
             from urllib.parse import parse_qs, urlparse
 
