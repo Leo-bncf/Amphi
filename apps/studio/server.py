@@ -917,6 +917,10 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s")
     load_dotenv()
     port = int(os.environ.get("PORT", "8765"))
+    # 127.0.0.1 par défaut : le studio n'a AUCUNE authentification. L'ouvrir sur
+    # le réseau, c'est offrir la lecture et la suppression de toutes les notes à
+    # quiconque partage le wifi. Réservé au partage ponctuel entre camarades.
+    host = os.environ.get("AMPHI_HOST", "127.0.0.1")
     model = os.environ.get("AMPHI_ASR_MODEL", "mlx-community/whisper-large-v3-turbo")
 
     StudioHandler.transcriber = Transcriber(model)
@@ -926,8 +930,22 @@ def main() -> None:
     if os.environ.get("MISTRAL_API_KEY", "") == "":
         LOG.warning("MISTRAL_API_KEY absente — la transcription marchera, pas la génération de notes")
 
-    server = ThreadingHTTPServer(("127.0.0.1", port), StudioHandler)
+    server = ThreadingHTTPServer((host, port), StudioHandler)
     LOG.info("Amphi Studio prêt → http://127.0.0.1:%d", port)
+    if host not in ("127.0.0.1", "localhost"):
+        import socket
+
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            probe.connect(("192.0.2.1", 1))   # adresse de test, aucun paquet émis
+            lan = probe.getsockname()[0]
+        except OSError:
+            lan = host
+        finally:
+            probe.close()
+        LOG.warning("Ouvert sur le réseau → http://%s:%d", lan, port)
+        LOG.warning("AUCUNE authentification : n'importe qui sur ce réseau peut lire "
+                    "et supprimer toutes les notes. À couper après usage.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

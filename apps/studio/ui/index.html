@@ -137,6 +137,15 @@ label.toggle { display: inline-flex; align-items: center; gap: var(--s-2xs); fon
 .folder .kind { font-family: var(--font-data); font-size: var(--t-xs); letter-spacing: .14em;
                 text-transform: uppercase; color: var(--accent); }
 
+#recentWrap { margin-bottom: var(--s-lg); }
+.rlbl { font-family: var(--font-data); font-size: var(--t-xs); letter-spacing: .16em;
+        text-transform: uppercase; color: var(--neutral); margin-bottom: var(--s-xs); }
+.recent { display: flex; gap: var(--s-xs); flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: baseline; gap: var(--s-xs); padding: 5px 11px;
+        border: 1px solid var(--rule); background: var(--paper); font-size: var(--t-sm);
+        font-family: var(--font-body); text-align: left; }
+.chip .in { font-family: var(--font-data); font-size: var(--t-xs); color: var(--neutral); }
+
 .libbar { display: flex; gap: var(--s-sm); align-items: center; flex-wrap: wrap;
           margin-bottom: var(--s-md); }
 #q { flex: 1; min-width: 240px; padding: 8px 12px; font-size: var(--t-sm); font-family: var(--font-display);
@@ -369,6 +378,9 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
       <input id="q" type="search" placeholder="Chercher dans les notes, le glossaire, la transcription…" autocomplete="off" />
     </div>
     <div class="crumb" id="crumb"></div>
+    <div id="recentWrap" class="hidden">
+      <div class="rlbl">Récentes</div><div id="recent" class="recent"></div>
+    </div>
     <div id="lib" class="lib"></div>
   </section>
 
@@ -420,6 +432,7 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
           <button id="imgBtn" disabled>Ajouter une image</button>
           <input type="file" id="imgInput" accept="image/*" multiple hidden />
           <span style="flex:1"></span>
+          <button id="htmlBtn" class="sm" disabled>Page autonome</button>
           <button id="mdBtn" class="sm" disabled>Markdown</button>
           <button id="printBtn" class="sm" disabled>Imprimer / PDF</button>
           <button id="saveBtn" class="sm" disabled>Enregistrer</button>
@@ -538,6 +551,23 @@ function renderLibrary() {
   loose.forEach((d, n) => host.appendChild(docCard(d, n + 1)));
 
   if (!groups.size && !loose.length) host.innerHTML = `<div class="empty">Ce dossier est vide.</div>`;
+
+  // À la racine, on liste aussi les séances récentes quel que soit leur dossier.
+  // Sans ça, ranger une séance la fait disparaître de la page d'accueil — et on
+  // croit l'avoir perdue.
+  $("recent").innerHTML = "";
+  const showRecent = lib.course === null && groups.size > 0;
+  $("recentWrap").classList.toggle("hidden", !showRecent);
+  if (showRecent) {
+    for (const d of lib.docs.slice(0, 6)) {
+      const el = document.createElement("button");
+      el.className = "chip";
+      const place = [d.course, d.chapter].filter(Boolean).join(" · ");
+      el.innerHTML = `<span>${esc(d.title)}</span>${place ? `<span class="in">${esc(place)}</span>` : ""}`;
+      el.onclick = () => openDoc(d.id);
+      $("recent").appendChild(el);
+    }
+  }
 }
 
 function docCard(d, n) {
@@ -746,7 +776,7 @@ function refresh() {
   $("notesBtn").disabled = !has;
   $("diagBtn").disabled = !state.doc && !has;
   $("imgBtn").disabled = !state.doc;
-  $("mdBtn").disabled = !state.doc;
+  $("mdBtn").disabled = !state.doc; $("htmlBtn").disabled = !state.doc;
   $("printBtn").disabled = !state.doc;
   $("saveBtn").disabled = !state.doc && !has;
 }
@@ -1009,6 +1039,72 @@ $("mdBtn").onclick = () => {
   a.href = URL.createObjectURL(new Blob([L.join("\n")], { type: "text/markdown;charset=utf-8" }));
   a.download = `${slug(d.title)}.md`; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+
+/**
+ * Export en page autonome — un seul fichier .html qui s'ouvre partout, sans
+ * serveur, sans réseau, sans installer quoi que ce soit.
+ *
+ * C'est la réponse au partage : envoyer le fichier marche toujours, là où
+ * ouvrir une URL suppose le même wifi et une machine allumée en face.
+ * Les polices et les glyphes mathématiques sont embarqués en base64, sinon
+ * les formules se dégradent en Times chez celui qui reçoit.
+ */
+const KATEX_CORE = ["Main-Regular", "Main-Bold", "Main-Italic", "Math-Italic", "Math-BoldItalic",
+                    "Size1-Regular", "Size2-Regular", "AMS-Regular", "Caligraphic-Regular"];
+
+async function inlineFonts(cssUrl, base, keep) {
+  let css = await (await fetch(cssUrl)).text();
+  const urls = [...new Set([...css.matchAll(/url\(([^)]+\.woff2)\)/g)].map((m) => m[1]))];
+  for (const rel of urls) {
+    const name = rel.split("/").pop().replace(".woff2", "");
+    if (keep && !keep.some((k) => name.includes(k))) { css = css.replaceAll(rel, ""); continue; }
+    const blob = await (await fetch(new URL(rel, base).pathname)).blob();
+    const data = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+    css = css.replaceAll(rel, data);
+  }
+  return css;
+}
+
+$("htmlBtn").onclick = async () => {
+  const btn = $("htmlBtn"); btn.disabled = true; btn.textContent = "assemblage…";
+  try {
+    const [appFonts, katexCss] = await Promise.all([
+      inlineFonts("/vendor/fonts/fonts.css", location.origin + "/vendor/fonts/", null),
+      inlineFonts("/vendor/katex/katex.min.css", location.origin + "/vendor/katex/", KATEX_CORE),
+    ]);
+    const appCss = [...document.styleSheets]
+      .filter((sh) => !sh.href)
+      .flatMap((sh) => [...sh.cssRules].map((r) => r.cssText))
+      .join("\n")
+      .replace(/@import[^;]+;/g, "");
+
+    // On part du DOM rendu : formules, schémas et images y sont déjà.
+    const sheet = $("sheet").cloneNode(true);
+    for (const el of sheet.querySelectorAll(".noprint, button, details, .rail")) el.remove();
+    for (const el of sheet.querySelectorAll("[contenteditable]")) el.removeAttribute("contenteditable");
+    for (const el of sheet.querySelectorAll("[data-ms]")) { el.removeAttribute("data-ms"); el.classList.remove("srcable"); }
+    const grid = sheet.querySelector(".sheetGrid");
+    if (grid) grid.style.gridTemplateColumns = "minmax(0, 1fr)";
+
+    const html = `<!doctype html><html lang="${state.doc.language ?? "fr"}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(state.doc.title)}</title>
+<style>${katexCss}</style><style>${appFonts}</style><style>${appCss}</style>
+<style>body{padding:0;background:var(--paper)}main{padding:var(--s-lg)}
+#sheet{max-width:1100px;margin:0 auto}</style></head>
+<body><main>${sheet.outerHTML}</main>
+<p style="text-align:center;font-family:var(--font-data);font-size:11px;color:var(--neutral);padding:24px">
+Notes prises avec Amphi · ${new Date().toLocaleDateString("fr-FR", { dateStyle: "long" })}</p>
+</body></html>`;
+
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+    a.download = `${slug(state.doc.title)}.html`; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    $("notesErr").textContent = `Page autonome exportée (${(html.length / 1048576).toFixed(1)} Mo) — envoie-la, elle s'ouvre sans rien installer.`;
+  } catch (e) { $("notesErr").textContent = "Export impossible : " + e.message; }
+  finally { btn.disabled = false; btn.textContent = "Page autonome"; refresh(); }
 };
 
 // -------------------------------------------------------- persistance
