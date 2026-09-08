@@ -431,6 +431,35 @@ def generate_local(transcript: str, language_rule: str = "Écris les notes en fr
     return json.loads(text[start : end + 1]), {"prompt_tokens": 0, "completion_tokens": 0}, latency_ms
 
 
+def loads_lenient(raw: str) -> Any:
+    """
+    Parse une réponse JSON éventuellement tronquée.
+
+    Quand le modèle atteint son plafond de tokens, il s'arrête au milieu d'un
+    objet et tout l'appel est perdu. Plutôt que de rendre zéro bloc — ce qui
+    donne « aucune note générée » sans explication — on récupère les éléments
+    complets et on jette le dernier, incomplet.
+    """
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
+    # On recule jusqu'au dernier objet complet, puis on referme les structures.
+    for cut in range(len(text) - 1, 0, -1):
+        if text[cut] != "}":
+            continue
+        candidate = text[: cut + 1]
+        for suffix in ("]}", "}]}", "}", "]", ""):
+            try:
+                return json.loads(candidate + suffix)
+            except json.JSONDecodeError:
+                continue
+    raise ValueError("réponse du modèle illisible, même après récupération partielle")
+
+
 def mistral_chat(
     api_key: str, messages: list[dict[str, Any]], *, model: str | None = None, max_tokens: int = 6000
 ) -> tuple[dict[str, Any], dict[str, int], float]:
@@ -453,8 +482,11 @@ def mistral_chat(
     with urllib.request.urlopen(request, timeout=240) as response:
         payload = json.loads(response.read())
     latency_ms = (time.perf_counter() - started) * 1000
-    content = payload["choices"][0]["message"]["content"]
-    return json.loads(content), payload.get("usage", {}), latency_ms
+    choice = payload["choices"][0]
+    content = choice["message"]["content"]
+    if choice.get("finish_reason") == "length":
+        LOG.warning("réponse coupée au plafond de tokens — récupération partielle")
+    return loads_lenient(content), payload.get("usage", {}), latency_ms
 
 
 def mistral_vision_text(api_key: str, data_url: str) -> tuple[str, dict[str, int], float]:
@@ -488,6 +520,263 @@ def mistral_vision_text(api_key: str, data_url: str) -> tuple[str, dict[str, int
         payload["choices"][0]["message"]["content"].strip(),
         payload.get("usage", {}),
         latency_ms,
+    )
+
+
+# Au-delà, un seul appel ne tient plus : le JSON est coupé au milieu et tout
+# l'appel est perdu. Un cours d'une heure fait couramment 600 segments.
+WINDOW_SEGMENTS = 130
+WINDOW_OVERLAP = 4
+
+WINDOW_PROMPT = """Tu produis les notes d'une PARTIE d'un cours — pas du cours entier.
+
+{LANGUAGE_RULE}
+
+Mêmes règles que d'habitude : chaque bloc cite ses sources dans `sourceSegmentIds`,
+rien d'inventé, pas de section creuse, pas de bloc tiré d'une phrase administrative.
+Les formules dictées deviennent des blocs "formula" en LaTeX ; les symboles dans le
+texte s'écrivent entre $...$.
+
+STRUCTURE — c'est ce qui distingue des notes d'une transcription reformatée.
+Ouvre par un titre de section (heading, level 2) qui nomme ce dont il est question,
+et découpe la partie en une à trois sections. Dès qu'une idée se décline, utilise des
+puces plutôt qu'un paragraphe : trois points en liste se relisent, un paragraphe de
+huit lignes ne se relit pas. Un terme technique introduit devient une "definition".
+Un enchaînement de paragraphes sans titre ni liste est un échec.
+
+Tu ne produis NI titre général, NI résumé, NI glossaire — quelqu'un d'autre s'en charge
+sur l'ensemble. Uniquement les blocs de cette partie, dans l'ordre où les choses sont dites.
+
+Réponds par : {"blocks":[ ... ]}
+Chaque bloc utilise EXACTEMENT les champs `type` et `text` — pas `kind`, pas `content`.
+Types disponibles : heading (level 2 ou 3), paragraph, bullets (items), definition
+(term + definition), callout (kind: a-retenir|exemple|attention|question-ouverte),
+formula (latex + caption)."""
+
+SUMMARY_PROMPT = """On te donne le plan et les points d'un cours déjà découpé en blocs.
+
+{LANGUAGE_RULE}
+
+Produis uniquement l'en-tête du document et son glossaire :
+{"title":"titre du cours, court et précis","summary":"deux ou trois phrases sur ce que
+la séance a couvert","glossary":[{"term":"...","definition":"...","sourceSegmentIds":["s12"]}]}
+
+Le glossaire reprend les termes techniques réellement définis dans le cours, avec
+l'identifiant du segment où ils apparaissent. Huit entrées au maximum."""
+
+
+BLOCK_TYPES = {"heading", "paragraph", "bullets", "definition", "callout", "formula"}
+
+
+CALLOUT_KINDS = {"a-retenir", "exemple", "attention", "question-ouverte"}
+
+
+def coerce_block(raw: Any) -> dict[str, Any] | None:
+    """
+    Ramène un bloc à la forme canonique, ou renvoie None s'il est inutilisable.
+
+    Le modèle produit au moins trois formes selon les appels :
+      {"type":"paragraph","text":"..."}          la forme demandée
+      {"paragraph":"..."}                        la clé porte le type
+      {"kind":"paragraph","content":"..."}       autres noms de champs
+
+    Courir après chaque variante par le prompt ne marche pas — un petit modèle
+    dérive sur la forme bien avant de dériver sur le fond. On accepte donc les
+    synonymes ici. Le coût de la rigidité était concret : la moitié des blocs
+    d'un cours de 46 minutes jetés, puis un plan vide, puis un titre inventé.
+    """
+    if not isinstance(raw, dict):
+        return None
+    block = dict(raw)
+
+    kind = None
+    if block.get("type") in BLOCK_TYPES:
+        kind = block["type"]
+    elif block.get("kind") in BLOCK_TYPES:
+        kind = block.pop("kind")
+    elif block.get("blockType") in BLOCK_TYPES:
+        kind = block.pop("blockType")
+    elif block.get("kind") in CALLOUT_KINDS:
+        kind = "callout"                      # un encadré qui n'a annoncé que sa nature
+    else:
+        for candidate in BLOCK_TYPES:
+            if candidate not in block:
+                continue
+            value = block.pop(candidate)
+            kind = candidate
+            if candidate == "bullets" and isinstance(value, list):
+                block["items"] = value
+            elif candidate == "definition" and isinstance(value, dict):
+                block.update(value)
+            elif candidate == "formula" and isinstance(value, str):
+                block.setdefault("latex", value)
+            elif isinstance(value, str):
+                block.setdefault("text", value)
+            break
+    if kind is None:
+        return None
+    block["type"] = kind
+
+    for alias in ("content", "body", "value", "paragraph"):
+        if not str(block.get("text", "")).strip() and isinstance(block.get(alias), str):
+            block["text"] = block[alias]
+    for alias in ("sources", "segmentIds", "sourceSegments", "source"):
+        if not block.get("sourceSegmentIds") and isinstance(block.get(alias), list):
+            block["sourceSegmentIds"] = block[alias]
+
+    if kind == "heading":
+        block.setdefault("level", 2)
+    elif kind == "bullets":
+        if not isinstance(block.get("items"), list):
+            raw_items = block.get("text") or ""
+            block["items"] = [raw_items] if raw_items else []
+        block["items"] = [str(i).strip() for i in block["items"] if str(i).strip()]
+        if not block["items"]:
+            return None
+    elif kind == "callout":
+        if block.get("kind") not in CALLOUT_KINDS:
+            block["kind"] = "a-retenir"
+    elif kind == "definition":
+        block.setdefault("term", "")
+        if not str(block.get("definition", "")).strip():
+            block["definition"] = block.get("text", "")
+        if not str(block["definition"]).strip():
+            return None
+    elif kind == "formula":
+        for alias in ("latex", "tex", "formula", "text"):
+            if str(block.get(alias, "")).strip():
+                block["latex"] = block[alias]
+                break
+        if not str(block.get("latex", "")).strip():
+            return None
+
+    if kind in ("heading", "paragraph", "callout") and not str(block.get("text", "")).strip():
+        return None
+    return block
+
+
+def locate_in_window(
+    block: dict[str, Any], segments: list[dict[str, Any]], lo: int, hi: int, top: int = 3
+) -> list[str]:
+    """
+    Retrouve d'où vient un bloc quand le modèle n'a pas cité ses sources.
+
+    En génération fenêtrée le modèle omet presque toujours `sourceSegmentIds`.
+    Le supplier dans le prompt ne marche pas ; on cherche donc nous-mêmes, par
+    recouvrement lexical, les segments de la fenêtre les plus proches du bloc.
+
+    Ce n'est pas un pis-aller : le résultat est souvent plus juste qu'une
+    citation du modèle, et surtout il reste vérifiable — un bloc sans aucun
+    recouvrement ne reçoit aucune source et sera écarté plus loin.
+    """
+    produced = content_words(block_text_of(block))
+    if not produced:
+        return []
+    scored = []
+    for i in range(lo, hi):
+        overlap = len(produced & content_words(segments[i].get("text", "")))
+        if overlap:
+            scored.append((overlap, i))
+    if not scored:
+        return []
+    scored.sort(reverse=True)
+    best = [i for _, i in scored[:top]]
+    return [f"s{i}" for i in sorted(best)]
+
+
+def generate_windowed(
+    api_key: str, segments: list[dict[str, Any]], attachments: list[dict[str, Any]],
+    language_rule: str,
+) -> tuple[dict[str, Any], dict[str, int], float]:
+    """
+    Génère les notes d'un long cours en plusieurs passes.
+
+    Un cours d'une heure produit plus de notes qu'un appel ne peut en écrire.
+    On découpe donc la transcription en fenêtres, on génère les blocs de chacune,
+    puis un dernier appel rédige le titre, le résumé et le glossaire sur
+    l'ensemble. Les identifiants de segments restent GLOBAUX pour que l'ancrage
+    et les horodatages continuent de pointer au bon endroit.
+    """
+    started = time.perf_counter()
+    usage = {"prompt_tokens": 0, "completion_tokens": 0}
+    blocks: list[dict[str, Any]] = []
+
+    context = ""
+    if attachments:
+        context = "\n\nDOCUMENTS FOURNIS\n" + "\n\n".join(
+            f"[a{i}] {a['name']}\n{a['text'][:2500]}" for i, a in enumerate(attachments)
+        )
+
+    starts = range(0, len(segments), WINDOW_SEGMENTS - WINDOW_OVERLAP)
+    windows = [(i, min(i + WINDOW_SEGMENTS, len(segments))) for i in starts]
+    windows = [w for w in windows if w[1] > w[0]]
+    LOG.info("cours long : %d segments → %d fenêtres", len(segments), len(windows))
+
+    for n, (lo, hi) in enumerate(windows, 1):
+        body = "\n".join(f"[s{i}] {segments[i]['text']}" for i in range(lo, hi))
+        header = f"PARTIE {n} SUR {len(windows)} DU COURS\n"
+        try:
+            doc, u, _ = mistral_chat(
+                api_key,
+                [
+                    {"role": "system", "content": WINDOW_PROMPT.replace("{LANGUAGE_RULE}", language_rule)},
+                    {"role": "user", "content": header + body + (context if n == 1 else "")},
+                ],
+                max_tokens=8000,
+            )
+        except Exception:  # noqa: BLE001 — une fenêtre ratée ne doit pas perdre les autres
+            LOG.exception("fenêtre %d/%d", n, len(windows))
+            continue
+        for key in usage:
+            usage[key] += u.get(key, 0)
+        got = doc.get("blocks") if isinstance(doc, dict) else doc
+        if isinstance(got, list):
+            for candidate in got:
+                fixed = coerce_block(candidate)
+                if fixed is None:
+                    continue
+                if not fixed.get("sourceSegmentIds"):
+                    found = locate_in_window(fixed, segments, lo, hi)
+                    if found:
+                        fixed["sourceSegmentIds"] = found
+                blocks.append(fixed)
+
+    # En-tête et glossaire à partir des blocs, pas de la transcription entière.
+    outline = "\n".join(
+        line for line in (
+            f"- {b.get('text') or b.get('term') or b.get('caption') or ' '.join(b.get('items') or [])}"[:180]
+            for b in blocks
+        ) if line.strip(" -")
+    )[:14000]
+    head: dict[str, Any] = {}
+    if not outline.strip():
+        # Sans plan, l'appel de synthèse invente un sujet. Mieux vaut pas de titre.
+        LOG.warning("aucun bloc exploitable : pas d'en-tête généré")
+        return ({"title": "Séance", "summary": "", "blocks": [], "glossary": []},
+                usage, (time.perf_counter() - started) * 1000)
+    try:
+        head, u, _ = mistral_chat(
+            api_key,
+            [
+                {"role": "system", "content": SUMMARY_PROMPT.replace("{LANGUAGE_RULE}", language_rule)},
+                {"role": "user", "content": outline},
+            ],
+            max_tokens=2500,
+        )
+        for key in usage:
+            usage[key] += u.get(key, 0)
+    except Exception:  # noqa: BLE001
+        LOG.exception("en-tête du document")
+
+    return (
+        {
+            "title": head.get("title") or "Séance",
+            "summary": head.get("summary") or "",
+            "blocks": blocks,
+            "glossary": head.get("glossary") or [],
+        },
+        usage,
+        (time.perf_counter() - started) * 1000,
     )
 
 
@@ -652,6 +941,7 @@ class StudioHandler(AsrHandler):
             "/diagram": self.handle_diagram,
             "/save": self.handle_save,
             "/delete": self.handle_delete,
+            "/move": self.handle_move,
         }
         handler = routes.get(self.path)
         if handler is None:
@@ -755,13 +1045,17 @@ class StudioHandler(AsrHandler):
 
         if api_key != "":
             try:
-                doc, usage, latency_ms = mistral_chat(
-                    api_key,
-                    [
-                        {"role": "system", "content": SYSTEM_PROMPT.replace("{LANGUAGE_RULE}", lang_rule)},
-                        {"role": "user", "content": "\n\n".join(parts)},
-                    ],
-                )
+                if len(segments) > WINDOW_SEGMENTS:
+                    doc, usage, latency_ms = generate_windowed(api_key, segments, attachments, lang_rule)
+                else:
+                    doc, usage, latency_ms = mistral_chat(
+                        api_key,
+                        [
+                            {"role": "system", "content": SYSTEM_PROMPT.replace("{LANGUAGE_RULE}", lang_rule)},
+                            {"role": "user", "content": "\n\n".join(parts)},
+                        ],
+                        max_tokens=8000,
+                    )
                 engine = MISTRAL_MODEL
             except urllib.error.HTTPError as exc:
                 detail = exc.read().decode("utf-8", "replace")[:200]
@@ -789,6 +1083,11 @@ class StudioHandler(AsrHandler):
                 if enrich and (block.get("text") or "").strip():
                     enrichments.append(block)
                 continue
+            fixed = coerce_block(block)
+            if fixed is None:
+                rejected += 1
+                continue
+            block = fixed
             anchor = verify_anchor(block, segments, attachments)
             if anchor is None:
                 rejected += 1
@@ -879,6 +1178,26 @@ class StudioHandler(AsrHandler):
         )
 
     # ------------------------------------------------------------ persistance
+
+    def handle_move(self) -> None:
+        """
+        Range une séance sans la charger côté navigateur.
+
+        Un aller-retour /load puis /save renverrait le document entier — 567 Ko
+        pour un cours d'une heure — juste pour changer deux champs. On modifie
+        sur place, en écriture atomique comme la sauvegarde.
+        """
+        payload = self._read_json()
+        path = DATA_DIR / f"{safe_id(payload.get('id'))}.json"
+        if not path.exists():
+            raise ValueError("séance introuvable")
+        doc = json.loads(path.read_text("utf-8"))
+        doc["course"] = str(payload.get("course") or "").strip()
+        doc["chapter"] = str(payload.get("chapter") or "").strip()
+        temp = path.with_suffix(".tmp")
+        temp.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+        temp.replace(path)
+        self._send(200, {"ok": True, "course": doc["course"], "chapter": doc["chapter"]})
 
     def handle_delete(self) -> None:
         payload = self._read_json()

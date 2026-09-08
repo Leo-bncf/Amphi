@@ -137,6 +137,22 @@ label.toggle { display: inline-flex; align-items: center; gap: var(--s-2xs); fon
 .folder .kind { font-family: var(--font-data); font-size: var(--t-xs); letter-spacing: .14em;
                 text-transform: uppercase; color: var(--accent); }
 
+.modal { position: fixed; inset: 0; background: color-mix(in oklab, var(--ink) 42%, transparent);
+         display: grid; place-items: center; z-index: 60; padding: var(--s-md); }
+.sheetlet { background: var(--paper); border: 1px solid var(--rule); padding: var(--s-lg);
+            width: min(420px, 100%); display: grid; gap: var(--s-sm); }
+.sheetlet .mt { font-family: var(--font-data); font-size: var(--t-xs); letter-spacing: .16em;
+                text-transform: uppercase; color: var(--accent); }
+.sheetlet .mn { font-family: var(--font-body); font-size: var(--t-lg); line-height: 1.25;
+                color: var(--ink); margin-bottom: var(--s-xs); }
+.sheetlet label { display: grid; gap: 4px; font-size: var(--t-xs); color: var(--neutral);
+                  font-family: var(--font-data); letter-spacing: .1em; text-transform: uppercase; }
+.sheetlet input { font-family: var(--font-display); font-size: var(--t-sm); padding: 7px 10px;
+                  border: 1px solid var(--rule); background: var(--paper-2); color: var(--ink); }
+.sheetlet .ma { display: flex; gap: var(--s-xs); justify-content: flex-end; margin-top: var(--s-xs); }
+.doc .mv { position: absolute; top: var(--s-xs); right: 30px; opacity: 0; }
+.doc:hover .mv { opacity: 1; }
+
 #recentWrap { margin-bottom: var(--s-lg); }
 .rlbl { font-family: var(--font-data); font-size: var(--t-xs); letter-spacing: .16em;
         text-transform: uppercase; color: var(--neutral); margin-bottom: var(--s-xs); }
@@ -575,10 +591,12 @@ function docCard(d, n) {
   const when = d.savedAt ? new Date(d.savedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "";
   const place = [d.course, d.chapter].filter(Boolean).join(" · ");
   el.innerHTML = `<button class="sm ghost del" title="Supprimer">✕</button>
+    <button class="sm ghost mv" title="Ranger dans une matière">⇄</button>
     <div class="idx">${String(n).padStart(2, "0")}${place ? " · " + esc(place) : ""}</div>
     <h3>${esc(d.title)}</h3><div class="meta"><span>${when}</span><span>${d.blocks} blocs</span>
     ${d.diagrams ? `<span>${d.diagrams} schéma</span>` : ""}${d.attachments ? `<span>${d.attachments} source</span>` : ""}</div>`;
   el.onclick = () => openDoc(d.id);
+  el.querySelector(".mv").onclick = (e) => { e.stopPropagation(); openMove(d); };
   el.querySelector(".del").onclick = async (e) => {
     e.stopPropagation();
     if (!confirm(`Supprimer « ${d.title} » ? C'est définitif.`)) return;
@@ -586,6 +604,39 @@ function docCard(d, n) {
     loadLibrary();
   };
   return el;
+}
+
+/**
+ * Rangement d'une séance depuis la bibliothèque, sans l'ouvrir.
+ *
+ * Les listes déroulantes proposent les matières et chapitres déjà utilisés :
+ * c'est ce qui évite de se retrouver avec « Maths », « maths » et
+ * « Mathématiques » comme trois dossiers distincts.
+ */
+function openMove(d) {
+  const courses = [...new Set(lib.docs.map((x) => (x.course || "").trim()).filter(Boolean))].sort();
+  const chapters = [...new Set(lib.docs.map((x) => (x.chapter || "").trim()).filter(Boolean))].sort();
+  const back = document.createElement("div"); back.className = "modal";
+  back.innerHTML = `<div class="sheetlet">
+      <div class="mt">Ranger la séance</div>
+      <div class="mn">${esc(d.title)}</div>
+      <label>Matière<input id="mvC" list="mvCl" value="${esc(d.course || "")}" placeholder="Business, Mathématiques…"></label>
+      <datalist id="mvCl">${courses.map((c) => `<option value="${esc(c)}">`).join("")}</datalist>
+      <label>Chapitre<input id="mvH" list="mvHl" value="${esc(d.chapter || "")}" placeholder="Chapitre 1, Semaine 3…"></label>
+      <datalist id="mvHl">${chapters.map((c) => `<option value="${esc(c)}">`).join("")}</datalist>
+      <div class="ma"><button id="mvX">Annuler</button><button id="mvOk" class="primary">Ranger</button></div>
+    </div>`;
+  document.body.appendChild(back);
+  const close = () => back.remove();
+  back.onclick = (e) => { if (e.target === back) close(); };
+  back.querySelector("#mvX").onclick = close;
+  addEventListener("keydown", function esc2(e) { if (e.key === "Escape") { close(); removeEventListener("keydown", esc2); } });
+  const input = back.querySelector("#mvC"); input.focus(); input.select();
+  back.querySelector("#mvOk").onclick = async () => {
+    await fetch("/move", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: d.id, course: back.querySelector("#mvC").value, chapter: back.querySelector("#mvH").value }) });
+    close(); loadLibrary();
+  };
 }
 
 let searchTimer = null;
