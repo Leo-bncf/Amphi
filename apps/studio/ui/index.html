@@ -560,7 +560,9 @@ function renderSheet() {
   host.innerHTML = parts.join("");
   for (const el of host.querySelectorAll(".anchor[data-ms]")) el.onclick = () => seek(+el.dataset.ms);
   for (const el of host.querySelectorAll(".blk")) el.addEventListener("input", () => onEdit(el));
-  state.diagrams.forEach((dg, i) => renderDiagram(dg, i));
+  // Un schéma supprimé laisse un trou dans le tableau : on le saute au rendu
+  // plutôt que de réindexer, sinon les identifiants de carte se décalent.
+  state.diagrams.forEach((dg, i) => dg && renderDiagram(dg, i));
 }
 
 function onEdit(el) {
