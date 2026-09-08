@@ -88,11 +88,20 @@ Réponds UNIQUEMENT par un objet JSON valide de cette forme :
     {"type":"bullets","items":["...","..."],"sourceSegmentIds":["s3"]},
     {"type":"definition","term":"...","definition":"...","sourceSegmentIds":["s4"]},
     {"type":"callout","kind":"a-retenir","text":"...","sourceSegmentIds":["s5"]},
+    {"type":"formula","latex":"J(\\\\beta) = \\\\sum_i (y_i - \\\\hat{y}_i)^2 + \\\\lambda \\\\sum_j \\\\beta_j^2",
+     "caption":"ce que la formule calcule","sourceSegmentIds":["s6"]},
     {"type":"paragraph","text":"...","sourceAttachmentIds":["a0"]}
   ],
   "glossary": [{"term":"...","definition":"...","sourceSegmentIds":["s4"]}]
 }
-`kind` vaut a-retenir, exemple, attention ou question-ouverte."""
+`kind` vaut a-retenir, exemple, attention ou question-ouverte.
+
+FORMULES. Dès que l'enseignant dicte une expression mathématique, produis un bloc
+"formula" en LaTeX — pas une phrase qui la décrit. « la somme des carrés des résidus
+plus lambda fois la somme des bêta j au carré » devient du LaTeX, jamais du texte.
+Dans les autres blocs, les symboles et expressions courtes s'écrivent entre $...$ :
+« le paramètre $\\lambda$ contrôle la pénalité ». C'est ce qui rend les notes
+relisibles la veille d'un partiel."""
 
 VISION_PROMPT = """Tu lis une photo prise pendant un cours : tableau, diapositive projetée, ou page de notes.
 
@@ -216,9 +225,28 @@ def drop_hollow_headings(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def block_text_of(block: dict[str, Any]) -> str:
-    parts = [str(v) for k, v in block.items() if k in ("text", "term", "definition")]
+    parts = [str(v) for k, v in block.items() if k in ("text", "term", "definition", "caption")]
     parts.extend(block.get("items", []) or [])
     return " ".join(parts)
+
+
+def _anchor_from(
+    indices: list[int], att_indices: list[int],
+    segments: list[dict[str, Any]], attachments: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Construit l'ancre une fois la vérification passée."""
+    names = [attachments[i]["name"] for i in att_indices]
+    if not indices:
+        if not att_indices:
+            return None
+        return {"kind": "attachment", "attachmentIds": [f"a{i}" for i in att_indices], "names": names}
+    return {
+        "kind": "transcript",
+        "segmentIds": [f"s{i}" for i in indices],
+        "startMs": min(segments[i]["startMs"] for i in indices),
+        "endMs": max(segments[i]["endMs"] for i in indices),
+        "names": names,
+    }
 
 
 def verify_anchor(
@@ -266,21 +294,17 @@ def verify_anchor(
     )
     produced = content_words(block_text_of(block))
     source = content_words(cited)
+    # Une formule ne partage presque jamais de mots avec l'oral : « bêta j au
+    # carré » prononcé devient \beta_j^2 écrit. Exiger un recouvrement lexical
+    # supprimerait justement les blocs les plus utiles.
+    if block.get("type") == "formula":
+        return _anchor_from(indices, att_indices, segments, attachments)
     # Un titre court peut légitimement ne partager aucun mot plein : on ne
     # l'exige qu'au-delà de quelques mots de contenu.
-    if len(produced) >= 4 and len(produced & source) == 0:
+    if block.get("type") != "formula" and len(produced) >= 4 and len(produced & source) == 0:
         return None
 
-    names = [attachments[i]["name"] for i in att_indices]
-    if not indices:
-        return {"kind": "attachment", "attachmentIds": [f"a{i}" for i in att_indices], "names": names}
-    return {
-        "kind": "transcript",
-        "segmentIds": [f"s{i}" for i in indices],
-        "startMs": min(segments[i]["startMs"] for i in indices),
-        "endMs": max(segments[i]["endMs"] for i in indices),
-        "names": names,
-    }
+    return _anchor_from(indices, att_indices, segments, attachments)
 
 
 _local_llm: Any = None

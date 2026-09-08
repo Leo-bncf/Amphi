@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Amphi — Studio</title>
+<link rel="stylesheet" href="/vendor/katex/katex.min.css" />
 <style>
 /* Hallmark · macrostructure: rail-and-column · pre-emit critique: P5 H5 E4 S5 R4 V5 */
 @import url("/vendor/fonts/fonts.css");
@@ -237,13 +238,35 @@ audio { width: 100%; margin-top: var(--s-sm); }
 .callout.attention .lbl::before { transform: rotate(45deg); }
 .callout.question-ouverte { border-style: dashed; }
 
-.enrich { margin: var(--s-lg) 0; padding: var(--s-sm) var(--s-md); border: 1px dashed var(--outside);
-          background: var(--outside-w); }
-.enrich .lbl { font-family: var(--font-display); font-size: var(--t-xs); font-weight: 700;
-               text-transform: uppercase; letter-spacing: .14em; color: var(--outside); display: block;
-               margin-bottom: 5px; }
+/* Formules — le point le plus regardé la veille d'un partiel. Display math
+   centré, respiration au-dessus et en dessous, légende en petit display. */
+.formula { margin: var(--s-lg) 0; padding: var(--s-md) var(--s-sm); border-top: 1px solid var(--hair);
+           border-bottom: 1px solid var(--hair); text-align: center; }
+.formula .katex-display { margin: 0; }
+.formula .katex { font-size: 1.24em; }
+.formula figcaption { font-family: var(--font-display); font-size: var(--t-xs); color: var(--neutral);
+                      margin-top: var(--s-xs); letter-spacing: .01em; }
+.formula .raw { display: none; font-family: var(--font-data); font-size: var(--t-xs);
+                color: var(--muted); word-break: break-all; }
+.formula.broken .raw { display: block; }
+.formula.broken { border-color: var(--accent); }
+/* Le math en ligne ne doit pas casser l'interligne du paragraphe. */
+#sheet .katex { font-size: 1.06em; }
+#sheet p .katex, #sheet li .katex, .def .katex, .callout .katex { font-size: 1.04em; }
+
+/* Compléments — un encart de manuel, pas une alerte. Le pointillé dit
+   « ajouté », le reste est traité avec le même soin que le cours. */
+.enrich { margin: var(--s-xl) 0; padding: var(--s-md) var(--s-md) var(--s-sm);
+          border: 1px dashed var(--outside); background: var(--outside-w); }
+.enrich .lbl { font-family: var(--font-data); font-size: var(--t-xs); font-weight: 700;
+               text-transform: uppercase; letter-spacing: .16em; color: var(--outside);
+               display: flex; align-items: center; gap: var(--s-xs); margin-bottom: var(--s-xs); }
+.enrich .lbl::after { content: ""; flex: 1; height: 1px; background: currentColor; opacity: .35; }
+.enrich h4 { font-family: var(--font-display); font-size: var(--t-md); font-weight: 700;
+             margin: 0 0 var(--s-2xs); color: var(--ink); letter-spacing: -.01em; }
 .enrich .why { font-family: var(--font-display); font-size: var(--t-sm); color: var(--muted);
-               margin-top: var(--s-xs); }
+               margin-top: var(--s-sm); padding-top: var(--s-xs); border-top: 1px solid color-mix(in oklab, var(--outside) 25%, transparent); }
+.enrich .render { margin-top: var(--s-sm); overflow-x: auto; }
 
 figure { margin: var(--s-lg) 0; }
 figure img { width: 100%; border: 1px solid var(--rule); display: block; }
@@ -293,6 +316,7 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
   .blk, .def, .callout, .enrich, .diagram, figure { break-inside: avoid; }
   .def, .callout, .enrich { background: #fff !important; border: 1px solid #999 !important; }
   .enrich { border-style: dashed !important; }
+  .formula { border-color: #999; }
   .stats { display: none; }
 }
 </style>
@@ -371,6 +395,8 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
   </section>
 </main>
 
+<script src="/vendor/katex/katex.min.js"></script>
+<script src="/vendor/katex/auto-render.min.js"></script>
 <script src="/vendor/mermaid.min.js"></script>
 <script type="module">
 const mermaid = globalThis.mermaid;
@@ -633,6 +659,13 @@ function blockHtml(b, i) {
   if (b.type === "bullets") return `<ul class="${cls}" ${ed}${src}>${b.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
   if (b.type === "definition")
     return `<div class="def"${src}><span class="term">${esc(b.term)}</span><span class="body ${cls}" ${ed}>${esc(b.definition)}</span></div>`;
+  if (b.type === "formula") {
+    // Le LaTeX brut reste dans data-latex : c'est lui la source de vérité,
+    // le DOM rendu par KaTeX n'est pas éditable à la main.
+    return `<figure class="formula"${src} data-i="${i}" data-latex="${esc(b.latex)}">
+      <div class="math"></div>${b.caption ? `<figcaption>${esc(b.caption)}</figcaption>` : ""}
+      <div class="raw">${esc(b.latex)}</div></figure>`;
+  }
   if (b.type === "callout")
     return `<div class="callout ${esc(b.kind)}"${src}><span class="lbl">${esc(b.kind.replace("-", " "))}</span>
       <span class="${cls}" ${ed}>${esc(b.text)}</span></div>`;
@@ -682,9 +715,10 @@ function renderSheet() {
     parts.push(`<p style="font-family:var(--sans);font-size:12.5px;color:var(--muted);margin-top:-2px">
       Hors cours : ces blocs comblent des prérequis supposés connus. Vérifie-les avant de réviser dessus.</p>`);
     d.enrichments.forEach((e, i) => parts.push(
-      `<div class="enrich"><span class="lbl">hors cours · ${esc(e.title ?? "complément")}</span>${esc(e.text)}
-       ${e.why ? `<div class="why">${esc(e.why)}</div>` : ""}
-       ${e.mermaid ? `<div class="render" id="enr-${i}" style="margin-top:12px"></div>` : ""}</div>`));
+      `<div class="enrich"><span class="lbl">hors cours</span>
+       <h4>${esc(e.title ?? "Complément")}</h4><div>${esc(e.text)}</div>
+       ${e.mermaid ? `<div class="render" id="enr-${i}"></div>` : ""}
+       ${e.why ? `<div class="why">${esc(e.why)}</div>` : ""}</div>`));
   }
 
   if (d.glossary?.length) {
@@ -701,6 +735,7 @@ function renderSheet() {
   for (const el of host.querySelectorAll("[data-ms]"))
     el.onclick = (e) => { if (!e.target.isContentEditable) seek(+el.dataset.ms); };
   for (const el of host.querySelectorAll(".blk")) el.addEventListener("input", () => onEdit(el));
+  typesetMath(host);
   state.images.forEach((im, i) => im && renderImage(im, i));
   state.diagrams.forEach((dg, i) => dg && renderDiagram(dg, i));
   (d.enrichments ?? []).forEach((e, i) => {
@@ -710,12 +745,45 @@ function renderSheet() {
   });
 }
 
+/**
+ * Rend les mathématiques : les blocs `formula` en display, et les $...$ semés
+ * dans le texte en ligne. Une formule qui ne compile pas affiche son LaTeX brut
+ * plutôt que de disparaître — sur une note de cours, une formule manquante est
+ * pire qu'une formule mal rendue.
+ */
+function typesetMath(root) {
+  for (const fig of root.querySelectorAll(".formula")) {
+    const latex = fig.dataset.latex ?? "";
+    try {
+      katex.render(latex, fig.querySelector(".math"), { displayMode: true, throwOnError: true, strict: false });
+    } catch (e) {
+      fig.classList.add("broken");
+      fig.querySelector(".math").innerHTML = `<span class="err">formule non rendue — ${esc(String(e.message ?? e).slice(0, 90))}</span>`;
+    }
+  }
+  if (typeof renderMathInElement !== "function") return;
+  renderMathInElement(root, {
+    delimiters: [
+      { left: "$$", right: "$$", display: true },
+      { left: "$", right: "$", display: false },
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true },
+    ],
+    // On ignore le display math déjà rendu (.math) et le LaTeX brut (.raw), mais
+    // PAS la figure entière : les légendes contiennent souvent des $...$ qui
+    // doivent être rendus eux aussi.
+    ignoredClasses: ["math", "raw", "render", "att"],
+    throwOnError: false,
+  });
+}
+
 function onEdit(el) {
   const d = state.doc, i = el.dataset.i, text = el.innerText.trim();
   if (i === "title") { d.title = text; $("docTitle").value = text; }
   else if (i === "summary") d.summary = text;
   else {
     const b = d.blocks[+i]; if (!b) return;
+    if (b.type === "formula") return;   // édition via le LaTeX, pas via le DOM rendu
     b.edited = true;
     if (b.type === "bullets") b.items = [...el.querySelectorAll("li")].map((li) => li.innerText.trim());
     else if (b.type === "definition") b.definition = text;
@@ -797,6 +865,7 @@ $("mdBtn").onclick = () => {
     if (b.type === "heading") L.push("", (b.level >= 3 ? "### " : "## ") + b.text, "");
     else if (b.type === "bullets") { for (const it of b.items) L.push(`- ${it}`); L.push(""); }
     else if (b.type === "definition") L.push(`**${b.term}** — ${b.definition}`, "");
+    else if (b.type === "formula") L.push("", `$$${b.latex}$$`, b.caption ? `*${b.caption}*` : "", "");
     else if (b.type === "callout") L.push(`> **${b.kind.replace("-", " ").toUpperCase()}** — ${b.text}`, "");
     else L.push(b.text, "");
   }

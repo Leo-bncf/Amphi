@@ -84,6 +84,17 @@ check(
     expect_kept=False,
 )
 
+check(
+    "formule : exemptée du recouvrement lexical, symboles ≠ mots prononcés",
+    {"type": "formula", "latex": r"\\beta_j^2", "caption": "pénalité L2", "sourceSegmentIds": ["s1"]},
+    expect_kept=True, expect_kind="transcript",
+)
+check(
+    "formule sans source valide : écartée quand même",
+    {"type": "formula", "latex": r"\\beta_j^2", "caption": "pénalité", "sourceSegmentIds": ["s404"]},
+    expect_kept=False,
+)
+
 print("\nSources mixtes — transcription et photo du tableau :\n")
 
 check(
