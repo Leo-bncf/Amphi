@@ -887,7 +887,9 @@ def call_mistral(api_key: str, transcript: str) -> tuple[dict[str, Any], dict[st
     return json.loads(content), usage, latency_ms
 
 
-DATA_DIR = STUDIO_DIR.parent.parent / "data" / "studio"
+# En développement, les notes vivent dans le dépôt. En service installé, elles
+# vivent hors du code — sinon un rsync de mise à jour les écraserait.
+DATA_DIR = Path(os.environ.get("AMPHI_DATA_DIR") or (STUDIO_DIR.parent.parent / "data" / "studio"))
 
 
 def safe_id(raw: Any) -> str:
