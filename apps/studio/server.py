@@ -21,6 +21,7 @@ import binascii
 import hmac
 import json
 import logging
+from datetime import datetime, timezone
 import os
 import re
 import sys
@@ -901,10 +902,48 @@ def call_mistral(api_key: str, transcript: str) -> tuple[dict[str, Any], dict[st
 DATA_DIR = Path(os.environ.get("AMPHI_DATA_DIR") or (STUDIO_DIR.parent.parent / "data" / "studio"))
 
 
+AUDIO_DIR = DATA_DIR / "audio"
+VERSIONS_DIR = DATA_DIR / "versions"
+
+# L'audio pèse ~14 Mo par heure. Le garder indéfiniment ferait 22 Go par an à
+# raison de 130 h de cours par mois — tenable sur un disque, pas sur la carte SD
+# d'une carte ARM. On le purge donc, sans jamais toucher aux notes.
+AUDIO_RETENTION_DAYS = int(os.environ.get("AMPHI_AUDIO_RETENTION_DAYS", "60"))
+KEEP_VERSIONS = 10
+
+
 def safe_id(raw: Any) -> str:
     """Un identifiant de document ne doit jamais pouvoir sortir de DATA_DIR."""
     cleaned = re.sub(r"[^a-zA-Z0-9_-]", "", str(raw or ""))[:64]
     return cleaned or "sans-titre"
+
+
+def snapshot(doc_id: str, payload: dict[str, Any]) -> None:
+    """Garde les dix derniers états d'une séance."""
+    folder = VERSIONS_DIR / doc_id
+    folder.mkdir(parents=True, exist_ok=True)
+    # Millisecondes : deux sauvegardes dans la même seconde — ce qui arrive dès
+    # qu'on corrige un titre puis qu'on enregistre — écrasaient la même archive.
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")[:-3]
+    (folder / f"{stamp}.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    for old in sorted(folder.glob("*.json"), reverse=True)[KEEP_VERSIONS:]:
+        old.unlink(missing_ok=True)
+
+
+def purge_old_audio() -> int:
+    """Supprime l'audio expiré. Les notes, elles, ne sont jamais touchées."""
+    if not AUDIO_DIR.exists() or AUDIO_RETENTION_DAYS <= 0:
+        return 0
+    cutoff = time.time() - AUDIO_RETENTION_DAYS * 86400
+    removed = 0
+    for f in AUDIO_DIR.rglob("*"):
+        if f.is_file() and f.stat().st_mtime < cutoff:
+            f.unlink(missing_ok=True)
+            removed += 1
+    for folder in AUDIO_DIR.iterdir() if AUDIO_DIR.exists() else []:
+        if folder.is_dir() and not any(folder.iterdir()):
+            folder.rmdir()
+    return removed
 
 
 def list_documents() -> list[dict[str, Any]]:
@@ -991,6 +1030,32 @@ class StudioHandler(AsrHandler):
             self._send_file(target, types.get(target.suffix, "application/octet-stream"),
                             cache="public, max-age=604800")
             return
+        if self.path.startswith("/audio/"):
+            parts = self.path[len("/audio/"):].split("/")
+            if len(parts) != 2:
+                self._send(404, {"error": "chemin audio invalide"})
+                return
+            target = AUDIO_DIR / safe_id(parts[0]) / re.sub(r"[^0-9a-zA-Z.]", "", parts[1])
+            self._send_file(target, "audio/webm" if target.suffix == ".webm" else "audio/mp4",
+                            cache="private, max-age=86400")
+            return
+        if self.path.startswith("/versions"):
+            from urllib.parse import parse_qs, urlparse
+
+            doc_id = safe_id((parse_qs(urlparse(self.path).query).get("id") or [""])[0])
+            folder = VERSIONS_DIR / doc_id
+            out = []
+            if folder.exists():
+                for f in sorted(folder.glob("*.json"), reverse=True):
+                    try:
+                        payload = json.loads(f.read_text("utf-8"))
+                    except (ValueError, OSError):
+                        continue
+                    doc = payload.get("doc") or {}
+                    out.append({"stamp": f.stem, "savedAt": payload.get("savedAt"),
+                                "title": doc.get("title"), "blocks": len(doc.get("blocks") or [])})
+            self._send(200, {"versions": out})
+            return
         if self.path.startswith("/search"):
             from urllib.parse import parse_qs, urlparse
             q = (parse_qs(urlparse(self.path).query).get("q") or [""])[0]
@@ -1034,8 +1099,14 @@ class StudioHandler(AsrHandler):
             "/save": self.handle_save,
             "/delete": self.handle_delete,
             "/move": self.handle_move,
+            "/audio": self.handle_audio,
+            "/restore": self.handle_restore,
         }
-        handler = routes.get(self.path)
+        # `self.path` contient la chaîne de requête : /audio?id=… ne matchait
+        # aucune route et repartait en 404 sans explication.
+        from urllib.parse import urlparse
+
+        handler = routes.get(urlparse(self.path).path)
         if handler is None:
             super().do_POST()
             return
@@ -1280,6 +1351,34 @@ class StudioHandler(AsrHandler):
 
     # ------------------------------------------------------------ persistance
 
+    def handle_audio(self) -> None:
+        """
+        Reçoit une partie d'enregistrement et la garde sur disque.
+
+        Sans ça, rouvrir une séance donnait le texte mais plus le son : les
+        horodatages restaient affichés en ne renvoyant nulle part, ce qui vidait
+        de sens la traçabilité qui est le principe du produit.
+        """
+        from urllib.parse import parse_qs, urlparse
+
+        params = parse_qs(urlparse(self.path).query)
+        doc_id = safe_id((params.get("id") or [""])[0])
+        seq = int((params.get("seq") or ["0"])[0])
+        suffix = ".mp4" if "mp4" in (params.get("mime") or [""])[0] else ".webm"
+
+        length = int(self.headers.get("Content-Length") or 0)
+        if length <= 0:
+            raise ValueError("corps audio vide")
+        blob = self.rfile.read(length)
+
+        folder = AUDIO_DIR / doc_id
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{seq:04d}{suffix}"
+        temp = path.with_suffix(path.suffix + ".tmp")
+        temp.write_bytes(blob)
+        temp.replace(path)
+        self._send(200, {"ok": True, "url": f"/audio/{doc_id}/{path.name}", "bytes": len(blob)})
+
     def handle_move(self) -> None:
         """
         Range une séance sans la charger côté navigateur.
@@ -1305,13 +1404,43 @@ class StudioHandler(AsrHandler):
         doc_id = safe_id(payload.get("id"))
         path = DATA_DIR / f"{doc_id}.json"
         path.unlink(missing_ok=True)
+        # L'audio et l'historique partent avec la séance : garder des morceaux
+        # d'une séance supprimée serait une surprise désagréable côté RGPD.
+        import shutil
+
+        shutil.rmtree(AUDIO_DIR / doc_id, ignore_errors=True)
+        shutil.rmtree(VERSIONS_DIR / doc_id, ignore_errors=True)
         self._send(200, {"ok": True, "id": doc_id})
+
+    def handle_restore(self) -> None:
+        """Remet une version antérieure en place, après avoir archivé l'actuelle."""
+        payload = self._read_json()
+        doc_id = safe_id(payload.get("id"))
+        stamp = re.sub(r"[^0-9T]", "", str(payload.get("stamp") or ""))
+        source = VERSIONS_DIR / doc_id / f"{stamp}.json"
+        if not source.exists():
+            raise ValueError("version introuvable")
+        current = DATA_DIR / f"{doc_id}.json"
+        if current.exists():
+            snapshot(doc_id, json.loads(current.read_text("utf-8")))
+        temp = current.with_suffix(".tmp")
+        temp.write_text(source.read_text("utf-8"), encoding="utf-8")
+        temp.replace(current)
+        self._send(200, {"ok": True, "restored": stamp})
 
     def handle_save(self) -> None:
         payload = self._read_json()
         doc_id = safe_id(payload.get("id"))
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         path = DATA_DIR / f"{doc_id}.json"
+        # Archive de l'état précédent AVANT d'écrire : régénérer des notes
+        # remplaçait tout sans filet, et une mauvaise génération effaçait une
+        # heure de cours sans possibilité de revenir en arrière.
+        if path.exists():
+            try:
+                snapshot(doc_id, json.loads(path.read_text("utf-8")))
+            except (ValueError, OSError):
+                LOG.warning("archive impossible pour %s", doc_id)
         # Écriture atomique : une sauvegarde interrompue ne doit pas laisser un
         # document tronqué à la place de notes de cours.
         temp = path.with_suffix(".tmp")
@@ -1370,6 +1499,9 @@ def main() -> None:
     server = ThreadingHTTPServer((host, port), StudioHandler)
     LOG.info("Amphi Studio prêt → http://127.0.0.1:%d", port)
     LOG.info("Mot de passe : %s", "activé" if AMPHI_PASSWORD else "aucun (accès local uniquement)")
+    purged = purge_old_audio()
+    if purged:
+        LOG.info("audio expiré supprimé : %d fichier(s) de plus de %d jours", purged, AUDIO_RETENTION_DAYS)
     if host not in ("127.0.0.1", "localhost"):
         import socket
 

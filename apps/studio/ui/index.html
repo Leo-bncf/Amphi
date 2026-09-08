@@ -156,6 +156,16 @@ label.toggle { display: inline-flex; align-items: center; gap: var(--s-2xs); fon
                   font-family: var(--font-data); letter-spacing: .1em; text-transform: uppercase; }
 .sheetlet input { font-family: var(--font-display); font-size: var(--t-sm); padding: 7px 10px;
                   border: 1px solid var(--rule); background: var(--paper-2); color: var(--ink); }
+.vlist { display: grid; max-height: 320px; overflow-y: auto; }
+.vrow { display: grid; grid-template-columns: 130px 1fr 68px; gap: var(--s-xs); text-align: left;
+        align-items: baseline; padding: 8px 6px; border: 0; border-top: 1px solid var(--hair);
+        background: none; }
+.vrow:hover { background: var(--paper-2); }
+.vrow .vd { font-family: var(--font-data); font-size: var(--t-xs); color: var(--neutral); }
+.vrow .vt { font-family: var(--font-body); color: var(--ink); overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap; }
+.vrow .vb { font-family: var(--font-data); font-size: var(--t-xs); color: var(--neutral); text-align: right; }
+
 .sheetlet .ma { display: flex; gap: var(--s-xs); justify-content: flex-end; margin-top: var(--s-xs); }
 .doc .mv { position: absolute; top: var(--s-xs); right: 30px; opacity: 0; }
 .doc:hover .mv { opacity: 1; }
@@ -550,6 +560,7 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
           <button id="htmlBtn" class="sm ghost" disabled>Page autonome</button>
           <button id="mdBtn" class="sm ghost" disabled>Markdown</button>
           <button id="printBtn" class="sm ghost" disabled>Imprimer</button>
+          <button id="verBtn" class="sm ghost" disabled>Versions</button>
           <button id="saveBtn" class="sm" disabled>Enregistrer</button>
         </div>
         <div class="err noprint" id="notesErr" style="margin-bottom:10px"></div>
@@ -783,11 +794,9 @@ async function openDoc(id) {
   if (s.empty) return;
   Object.assign(state, { id, segments: s.segments ?? [], attachments: s.attachments ?? [],
                          doc: s.doc ?? null, diagrams: s.diagrams ?? [], images: s.images ?? [],
-                         parts: [] });
-  // L'audio n'est pas conservé côté serveur : en rouvrant une séance on a le
-  // texte et les notes, pas le son. Les horodatages restent affichés, ils ne
-  // renvoient simplement plus nulle part.
-  $("parts").innerHTML = ""; $("player").hidden = true; $("player").removeAttribute("data-url");
+                         parts: (s.parts ?? []).map((p) => ({ ...p, state: p.url ? "audio conservé" : "audio expiré" })) });
+  $("player").hidden = true; $("player").removeAttribute("data-url");
+  renderParts();
   $("docTitle").value = s.doc?.title ?? "";
   $("docCourse").value = s.course ?? ""; $("docChapter").value = s.chapter ?? "";
   // Une séance déjà générée impose sa langue : régénérer ne doit pas la changer.
@@ -859,6 +868,9 @@ async function startRec() {
 
   // Une reprise s'ajoute à la suite : « le cours en deux parties » donne une
   // seule timeline et donc un seul jeu de notes.
+  // L'identifiant est attribué dès l'enregistrement, pas à la sauvegarde :
+  // c'est lui qui range l'audio sur le serveur au fur et à mesure.
+  state.id ??= `${slug($("docTitle").value || "seance")}-${Date.now().toString(36)}`;
   state.recording = true;
   state.partBase = state.segments.length ? state.segments.at(-1).endMs : 0;
   state.startedAt = Date.now();
@@ -903,7 +915,8 @@ function stopRec() {
 
 /** File d'attente : une partie à la fois, pour ne pas saturer le moteur local. */
 async function enqueuePart(blob, mime, startMs) {
-  const part = { startMs, blob, url: URL.createObjectURL(blob), state: "en attente" };
+  const part = { seq: state.parts.length, startMs, blob,
+                 url: URL.createObjectURL(blob), state: "en attente" };
   state.parts.push(part);
   renderParts();
   state.queue = (state.queue ?? Promise.resolve()).then(() => transcribePart(part, mime));
@@ -924,6 +937,13 @@ async function transcribePart(part, mime) {
     }
     part.endMs = part.startMs + res.audioDurationMs;
     part.state = `${res.segments.length} segments`;
+    // L'audio part sur le serveur une fois la transcription réussie : on ne
+    // stocke pas ce qu'on n'a pas pu exploiter.
+    try {
+      const up = await fetch(`/audio?id=${encodeURIComponent(state.id)}&seq=${part.seq}&mime=${encodeURIComponent(mime)}`,
+        { method: "POST", body: part.blob, headers: { "Content-Type": "application/octet-stream" } });
+      if (up.ok) part.url = (await up.json()).url;
+    } catch { /* l'audio local reste utilisable dans cette session */ }
     state.segments.push(...res.segments);
     state.segments.sort((a, b) => a.startMs - b.startMs);
     renderTranscript({ segments: state.segments,
@@ -1074,6 +1094,7 @@ function refresh() {
   $("diagBtn").disabled = !state.doc && !has;
   $("imgBtn").disabled = !state.doc;
   $("mdBtn").disabled = !state.doc; $("htmlBtn").disabled = !state.doc;
+  $("verBtn").disabled = !state.id;
   $("printBtn").disabled = !state.doc;
   $("saveBtn").disabled = !state.doc && !has;
 }
@@ -1404,6 +1425,36 @@ Notes prises avec Amphi · ${new Date().toLocaleDateString("fr-FR", { dateStyle:
   finally { btn.disabled = false; btn.textContent = "Page autonome"; refresh(); }
 };
 
+/**
+ * Historique. Chaque sauvegarde archive l'état précédent côté serveur — dix
+ * versions gardées. Régénérer des notes remplaçait tout sans filet : une
+ * mauvaise génération effaçait une heure de cours sans retour possible.
+ */
+$("verBtn").onclick = async () => {
+  const { versions } = await (await fetch(`/versions?id=${encodeURIComponent(state.id)}`)).json();
+  const back = document.createElement("div"); back.className = "modal";
+  back.innerHTML = `<div class="sheetlet">
+    <div class="mt">Versions précédentes</div>
+    <div class="mn">${esc(state.doc?.title ?? "cette séance")}</div>
+    ${versions.length
+      ? `<div class="vlist">${versions.map((v) => `<button class="vrow" data-s="${esc(v.stamp)}">
+           <span class="vd">${new Date(v.savedAt ?? 0).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}</span>
+           <span class="vt">${esc(v.title ?? "sans titre")}</span>
+           <span class="vb">${v.blocks} blocs</span></button>`).join("")}</div>`
+      : `<div class="empty" style="padding:var(--s-lg) 0">Aucune version antérieure — l'historique commence à la prochaine sauvegarde.</div>`}
+    <div class="ma"><button id="vX">Fermer</button></div></div>`;
+  document.body.appendChild(back);
+  const close = () => back.remove();
+  back.onclick = (e) => { if (e.target === back) close(); };
+  back.querySelector("#vX").onclick = close;
+  for (const row of back.querySelectorAll(".vrow")) row.onclick = async () => {
+    if (!confirm("Restaurer cette version ? L'état actuel sera archivé, pas perdu.")) return;
+    await fetch("/restore", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: state.id, stamp: row.dataset.s }) });
+    close(); openDoc(state.id);
+  };
+};
+
 // -------------------------------------------------------- persistance
 function markDirty() { state.dirty = true; $("saveBtn").disabled = false; $("saveState").textContent = "non enregistré"; }
 for (const id of ["docTitle", "docCourse", "docChapter"]) $(id).addEventListener("input", markDirty);
@@ -1417,6 +1468,9 @@ async function save() {
     await fetch("/save", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: state.id, doc: state.doc, diagrams: state.diagrams.filter(Boolean),
                              images: state.images.filter(Boolean), attachments: live(),
+                             // On garde l'emplacement de l'audio, jamais l'audio lui-même.
+                             parts: state.parts.filter((p) => p.url?.startsWith("/audio/"))
+                               .map((p) => ({ seq: p.seq, startMs: p.startMs, endMs: p.endMs, url: p.url })),
                              course: $("docCourse").value.trim(), chapter: $("docChapter").value.trim(),
                              segments: state.segments, savedAt: new Date().toISOString() }) });
     state.dirty = false; $("saveBtn").disabled = true;
