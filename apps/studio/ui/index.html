@@ -40,10 +40,12 @@
   #saveState { color: var(--edit); font-size: 12px; }
   #engine { color: var(--muted); font-size: 11px; font-family: var(--mono); }
 
-  main { max-width: 1360px; margin: 0 auto; padding: 18px 20px 70px; }
-  .grid { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; align-items: start; }
-  @media (max-width: 1040px) { .grid { grid-template-columns: 1fr; } }
-  .full { grid-column: 1 / -1; }
+  main { max-width: 1720px; margin: 0 auto; padding: 18px 22px 70px; }
+  .workspace { display: grid; gap: 16px; grid-template-columns: 330px minmax(0, 1fr); align-items: start; }
+  .workspace.solo { grid-template-columns: minmax(0, 1fr); }
+  .workspace.solo #sidePanel { display: none; }
+  @media (max-width: 1040px) { .workspace { grid-template-columns: 1fr; } }
+  #sidePanel { display: grid; gap: 14px; align-content: start; position: sticky; top: 70px; }
   .hidden { display: none !important; }
 
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 15px; }
@@ -100,14 +102,33 @@
   /* ============================ LA FEUILLE ============================ */
   #sheet { background: var(--paper); border: 1px solid var(--line); border-radius: 14px;
            box-shadow: 0 1px 3px rgba(0,0,0,.05), 0 12px 32px -18px rgba(0,0,0,.22);
-           font-family: var(--serif); font-size: 17px; line-height: 1.7; color: var(--ink-soft);
-           max-width: 74ch; margin: 0 auto; overflow: hidden; }
-  .sheetInner { padding: 0 56px 56px; }
-  @media (max-width: 700px) { .sheetInner { padding: 0 22px 34px; } }
+           font-family: var(--serif); font-size: 17.5px; line-height: 1.7; color: var(--ink-soft);
+           width: 100%; overflow: hidden; }
 
-  .cover { padding: 40px 56px 26px; background: linear-gradient(160deg, var(--accent-tint) 0%, transparent 62%);
+  /* La feuille occupe toute la largeur disponible. Le texte, lui, garde une
+     longueur de ligne lisible : au-delà de ~95 caractères l'œil perd la ligne
+     suivante. On remplit donc l'espace avec un sommaire à gauche plutôt qu'en
+     étirant les paragraphes. */
+  .sheetGrid { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 34px;
+               padding: 0 46px 56px; align-items: start; }
+  @media (max-width: 1100px) { .sheetGrid { grid-template-columns: 1fr; gap: 0; padding: 0 34px 44px; } }
+  @media (max-width: 700px) { .sheetGrid { padding: 0 20px 32px; } }
+  .sheetInner { max-width: 95ch; }
+
+  .toc { position: sticky; top: 74px; font-family: var(--sans); font-size: 12.5px; padding-top: 6px; }
+  @media (max-width: 1100px) { .toc { display: none; } }
+  .toc .tt { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+             color: var(--muted); margin-bottom: 10px; }
+  .toc a { display: flex; gap: 8px; padding: 5px 8px; border-radius: 6px; color: var(--muted);
+           text-decoration: none; line-height: 1.35; }
+  .toc a:hover { background: var(--accent-tint); color: var(--ink); }
+  .toc a .n { font-family: var(--mono); font-size: 10.5px; color: var(--accent); flex: none; padding-top: 1px; }
+  .toc .meta { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--hair);
+               color: var(--muted); font-size: 11.5px; display: grid; gap: 4px; }
+
+  .cover { padding: 42px 46px 28px; background: linear-gradient(160deg, var(--accent-tint) 0%, transparent 62%);
            border-bottom: 1px solid var(--hair); margin-bottom: 30px; }
-  @media (max-width: 700px) { .cover { padding: 28px 22px 20px; } }
+  @media (max-width: 700px) { .cover { padding: 28px 20px 20px; } }
   .cover .kicker { font-family: var(--sans); font-size: 10.5px; font-weight: 700; letter-spacing: .16em;
                    text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
   .cover .doctitle { font-size: 32px; line-height: 1.14; margin: 0; color: var(--ink); font-weight: 600;
@@ -199,7 +220,9 @@
     body { background: #fff; color: #000; font-size: 10.5pt; }
     main { max-width: none; padding: 0; }
     #sheet { border: 0; box-shadow: none; max-width: none; background: #fff; border-radius: 0; }
-    .sheetInner { padding: 0; }
+    .sheetGrid { display: block; padding: 0; }
+    .toc { display: none !important; }
+    .sheetInner { max-width: none; }
     .cover { padding: 0 0 14pt; background: none; border-bottom: 1.5pt solid #000; margin-bottom: 18pt; }
     .cover .doctitle { font-size: 22pt; }
     .cover .rule { background: #000; }
@@ -232,8 +255,7 @@
   </section>
 
   <section id="viewSes" class="hidden">
-    <div class="grid">
-      <div class="card full noprint" id="recCard">
+    <div class="card noprint" id="recCard" style="margin-bottom:16px">
         <h2>Enregistrement</h2>
         <div class="row" style="gap:14px">
           <button id="recBtn" title="Enregistrer">●</button>
@@ -245,16 +267,18 @@
                  border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);min-width:200px" />
         </div>
         <audio id="player" controls hidden></audio>
-      </div>
+    </div>
 
-      <div class="card noprint" id="transcriptCard">
+    <div class="workspace" id="workspace">
+      <div id="sidePanel" class="noprint">
+      <div class="card" id="transcriptCard">
         <h2>Transcription</h2>
         <p class="hint">Clique un horodatage pour sauter au passage.</p>
         <div id="transcript" class="scroll"><div class="empty">Rien encore.</div></div>
         <div class="stats" id="tStats" hidden style="margin-top:11px"></div>
       </div>
 
-      <div class="card noprint" id="docsCard">
+      <div class="card" id="docsCard">
         <h2>Sources</h2>
         <p class="hint">Photo du tableau, diapositive, texte collé : sert de matière aux notes. Pour insérer une image <em>dans</em> les notes, utilise « Ajouter une image ».</p>
         <div id="drop">Dépose une image ou un fichier texte — ou clique pour choisir</div>
@@ -262,9 +286,11 @@
         <div class="row" style="margin-top:8px"><button class="sm" id="pasteBtn">Coller du texte</button></div>
         <div id="attachments"></div>
       </div>
+      </div>
 
-      <div class="full">
+      <div>
         <div class="row noprint" style="margin-bottom:12px">
+          <button id="soloBtn" class="sm" title="Masquer le panneau et occuper toute la page">⇤ Pleine page</button>
           <button id="notesBtn" class="primary" disabled>Générer les notes</button>
           <select id="langSel" title="Langue des notes">
             <option value="auto">Langue : auto</option><option value="fr">Français</option>
@@ -310,6 +336,17 @@ function show(v) {
 }
 $("tabLib").onclick = () => show("lib");
 $("tabSes").onclick = () => show("ses");
+
+// Pleine page : le panneau de travail disparaît, la feuille prend tout l'espace.
+// L'état est retenu, parce qu'on relit bien plus souvent qu'on n'enregistre.
+const SOLO_KEY = "amphi.solo";
+function applySolo(on) {
+  $("workspace").classList.toggle("solo", on);
+  $("soloBtn").textContent = on ? "⇥ Afficher le panneau" : "⇤ Pleine page";
+  try { localStorage.setItem(SOLO_KEY, on ? "1" : "0"); } catch { /* navigation privée */ }
+}
+$("soloBtn").onclick = () => applySolo(!$("workspace").classList.contains("solo"));
+try { applySolo(localStorage.getItem(SOLO_KEY) === "1"); } catch { applySolo(false); }
 
 async function checkEngine() {
   try {
@@ -363,6 +400,8 @@ async function openDoc(id) {
   }
   if (state.doc) renderSheet(); else $("sheet").innerHTML = `<div class="empty">Séance sans notes.</div>`;
   state.dirty = false; $("saveState").textContent = ""; refresh(); show("ses");
+  // On vient de la bibliothèque : on est là pour lire, pas pour enregistrer.
+  applySolo(true);
 }
 
 $("newBtn").onclick = () => {
@@ -371,6 +410,7 @@ $("newBtn").onclick = () => {
   $("transcript").innerHTML = `<div class="empty">Rien encore.</div>`; $("tStats").hidden = true;
   $("sheet").innerHTML = `<div class="empty">Enregistre une séance ou dépose un document, puis génère les notes.</div>`;
   $("player").hidden = true; $("saveState").textContent = ""; refresh(); show("ses");
+  applySolo(false);
 };
 
 // ------------------------------------------------------------ capture
@@ -551,17 +591,27 @@ function renderSheet() {
   const body = d.blocks.map((b, i) => {
     if (b.type === "heading" && (b.level ?? 2) <= 2) {
       n += 1;
-      return `<div class="sec"><span class="num">${String(n).padStart(2, "0")}</span>
+      return `<div class="sec" id="sec-${n}"><span class="num">${String(n).padStart(2, "0")}</span>
         <h2 class="blk${b.edited ? " edited" : ""}" contenteditable="true" data-i="${i}"${srcAttrs(b.anchor)}>${esc(b.text)}</h2></div>`;
     }
     return blockHtml(b, i);
   });
 
+  // Sommaire : ce qui remplit la largeur sans étirer les lignes de texte.
+  const toc = d.blocks
+    .map((b, i) => ({ b, i }))
+    .filter(({ b }) => b.type === "heading" && (b.level ?? 2) <= 2)
+    .map(({ b }, k) => `<a href="#sec-${k + 1}"><span class="n">${String(k + 1).padStart(2, "0")}</span><span>${esc(b.text)}</span></a>`)
+    .join("");
+
   const parts = [
     `<div class="cover"><div class="kicker">Notes de cours${d.language ? " · " + esc(d.language.toUpperCase()) : ""}</div>
        <h1 class="doctitle blk" contenteditable="true" data-i="title">${esc(d.title)}</h1>
        <div class="rule"></div><div class="docmeta">${meta.map((m) => `<span>${esc(m)}</span>`).join("")}</div></div>`,
-    `<div class="sheetInner">`,
+    `<div class="sheetGrid"><nav class="toc noprint">`,
+    toc ? `<div class="tt">Sommaire</div>${toc}` : "",
+    `<div class="meta">${meta.map((m) => `<span>${esc(m)}</span>`).join("")}</div>`,
+    `</nav><div class="sheetInner">`,
     `<p class="lede blk" contenteditable="true" data-i="summary">${esc(d.summary)}</p>`,
     ...body,
     `<div id="imgHost"></div>`,
