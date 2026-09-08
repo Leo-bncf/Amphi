@@ -309,13 +309,11 @@ audio { width: 100%; margin-top: var(--s-sm); }
 
 /* Rail à gauche, colonne de lecture à droite : la structure vient du rail, pas
    de numéros posés dans la marge du texte. */
-/* Le papier occupe toute la largeur ; la colonne de lecture reste centrée et
-   bornée. Une ligne de 1 400 px ne se lit pas — l'œil perd la ligne suivante —
-   et une colonne calée à gauche dans un grand vide se voit tout autant. */
-.sheetGrid { display: grid; grid-template-columns: 224px minmax(0, 74ch);
-             justify-content: center; align-items: start; }
-@media (max-width: 1100px) { .sheetGrid { grid-template-columns: minmax(0, 74ch);
-                                          justify-content: center; } }
+/* Le papier occupe toute la largeur, la colonne de texte reste à gauche et
+   bornée à ~78 caractères. Le vide à droite est voulu : au-delà de cette
+   longueur de ligne, l'œil ne retrouve plus le début de la suivante. */
+.sheetGrid { display: grid; grid-template-columns: 224px minmax(0, 1fr); align-items: start; }
+@media (max-width: 1100px) { .sheetGrid { grid-template-columns: 1fr; } }
 .rail { position: sticky; top: 70px; padding: var(--s-lg) var(--s-md) var(--s-xl) var(--s-lg);
         border-right: 1px solid var(--hair); font-family: var(--font-display); font-size: var(--t-sm); }
 @media (max-width: 1100px) { .rail { display: none; } }
@@ -328,7 +326,7 @@ audio { width: 100%; margin-top: var(--s-sm); }
 .rail .meta { margin-top: var(--s-md); padding-top: var(--s-sm); border-top: 1px solid var(--hair);
               color: var(--neutral); font-size: var(--t-xs); display: grid; gap: 3px;
               font-family: var(--font-data); }
-.sheetInner { padding: var(--s-xl) var(--s-xl) var(--s-2xl); min-width: 0; }
+.sheetInner { padding: var(--s-xl) var(--s-xl) var(--s-2xl); max-width: 78ch; min-width: 0; }
 @media (max-width: 700px) { .sheetInner { padding: var(--s-lg) var(--s-md) var(--s-xl); } }
 
 /* Couverture biaisée à gauche ; l'eyebrow sort de l'axe, à droite du titre. */
