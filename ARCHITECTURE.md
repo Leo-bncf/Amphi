@@ -8,14 +8,14 @@
 
 ## 0. TL;DR
 
-Une PWA offline-first qui enregistre le cours depuis plusieurs téléphones, transcrit côté serveur, **fusionne les flux** en une transcription canonique, en génère des notes structurées et traçables, éditables en collaboratif.
+Une PWA offline-first qui enregistre le cours depuis plusieurs laptops de la promo, transcrit localement, **fusionne les flux** en une transcription canonique, en génère des notes structurées et traçables, éditables en collaboratif.
 
 **Les 7 conclusions qui changent le projet par rapport au brief :**
 
 | # | Conclusion | Impact |
 |---|---|---|
 | 1 | **L'app tourne sur ton propre matériel** : une VM dédiée sur `infra-pve-2`, qui tourne déjà 24/7 pour schedual. Coût marginal en électricité ≈ 0. Exposition par un **tunnel Cloudflare dédié** — ta ligne est en CGNAT, aucun port-forwarding n'est possible. | Plus de VM louée, plus d'object storage payant, plus d'arbitrage Hetzner/Scaleway. Voir [§11](#11-coûts). |
-| 2 | **La bonne machine pour l'IA, c'est ton MacBook, pas tes serveurs.** Mesuré : le M4 transcrit à **9,9× le temps réel** (Whisper large-v3-turbo, MLX/Metal), là où les ProLiant de 2012 (Xeon E5, DDR3, sans GPU) sont un ordre de grandeur en dessous pour quatre fois la consommation. Et il est déjà dans l'amphi : ton propre scénario, c'est téléphone sur la table + laptop pour éditer. | **Worker ASR local sur ton Mac** (ADR-15), repli payant quand il dort. La règle générale : *héberger* l'app sur une machine déjà allumée coûte quelques watts, donc rien ; *inférer* sature un CPU pendant des heures, donc c'est facturé — par EDF au lieu d'un fournisseur d'API, et à chaque mesure EDF est plus cher. |
+| 2 | **La bonne machine pour l'IA, c'est ton MacBook, pas tes serveurs.** Mesuré : le M4 transcrit à **9,9× le temps réel** (Whisper large-v3-turbo, MLX/Metal), là où les ProLiant de 2012 (Xeon E5, DDR3, sans GPU) sont un ordre de grandeur en dessous pour quatre fois la consommation. Et il est déjà dans l'amphi : c'est la machine sur laquelle tu prends des notes. | **Worker ASR local sur ton Mac** (ADR-15), repli payant quand il dort. La règle générale : *héberger* l'app sur une machine déjà allumée coûte quelques watts, donc rien ; *inférer* sature un CPU pendant des heures, donc c'est facturé — par EDF au lieu d'un fournisseur d'API, et à chaque mesure EDF est plus cher. |
 | 3 | **Le budget final est de ~2,80 €/mois, et la fusion redevient le comportement par défaut.** L'ASR local rend `K` gratuit, et sous Haiku 4.5 les modèles se tiennent à 22 centimes par mois d'écart — le prix cesse d'être le critère. | **Fusion à 3 flux sur toutes les heures**, résumés live, document final par **Mistral Small 4** (ADR-16). Le chiffre que tu avais validé, 7,16 €/mois, devient le **pire cas** — Mac éteint tout le mois — au lieu du cas nominal. Voir [§11](#11-coûts). |
 | 4 | **La sync temporelle décrite au §3.3 du brief (corrélation sur les 60 premières secondes) ne peut pas tenir le critère « < 200 ms après 60 min ».** Les horloges d'échantillonnage audio des téléphones dérivent de 10 à 100 ppm, soit jusqu'à **360 ms/heure** — la dérive est le terme dominant, pas l'offset initial. | Je propose un **ré-ancrage continu** (offset + pente estimés en continu sur toute la séance), pas un calage unique. Voir [§5.1](#51-synchronisation-temporelle). Sans ça, le critère d'acceptation est inatteignable. |
 | 5 | ~~**`MediaRecorder` est un piège sur iOS.**~~ **Corrigé le 2026-09-08 : il n'y a pas d'iPhone, la capture se fait depuis le laptop.** Toute la complexité prévue — AudioWorklet, Wake Lock, détection de trous, chunks Opus autonomes — existait pour contourner la suspension de Safari sur iOS. Sur macOS, ce problème n'existe pas. | **Le risque n°1 du projet disparaît.** M1 capture avec `MediaRecorder` dans le navigateur du Mac, ce qui suffit. Le chemin AudioWorklet redevient nécessaire en **M3** seulement, et pour une autre raison : l'enveloppe d'énergie du ré-ancrage temporel exige un accès au PCM. Voir [§4](#4--capture-audio). |
@@ -28,7 +28,7 @@ Une PWA offline-first qui enregistre le cours depuis plusieurs téléphones, tra
 
 **Dedans :** capture multi-appareils, ASR serveur, consensus, notes IA traçables, édition collaborative, diagrammes, ICS, recherche, RGPD/suppression, offline.
 **Dehors (rappel du brief) :** natif iOS/Android, diarisation nominative, traduction, paiement, multi-établissement.
-**Cible :** 10–30 comptes, 1 promo, **~30 h de cours par semaine** (≈ 130 h/mois).
+**Cible :** 10–30 comptes, 1 promo, **~30 h de cours par semaine** (≈ 130 h/mois). Capture **depuis les laptops** — pas de téléphone dans le scénario nominal.
 
 Hypothèse dimensionnante : **les étudiants partagent les mêmes cours**. Le coût ne croît donc pas avec le nombre d'utilisateurs mais avec le nombre d'**heures de cours** — sauf pour l'ASR, qui croît avec le nombre de flux transcrits par session. D'où le plafond `K` sur les flux (voir [§5.0](#50-avant-la-fusion--sélection-des-flux)).
 
@@ -40,7 +40,7 @@ Hypothèse dimensionnante : **les étudiants partagent les mêmes cours**. Le co
 
 ```mermaid
 graph TB
-    subgraph Client["Téléphone / Laptop — PWA"]
+    subgraph Client["Laptop — PWA"]
         MIC["AudioWorklet 16 kHz mono"] --> VAD["VAD Silero<br/>+ enveloppe d'énergie 50 Hz"]
         VAD --> ENC["Encodeur Opus<br/>Web Worker"]
         ENC --> Q[("File IndexedDB<br/>chunks + envelopes")]
