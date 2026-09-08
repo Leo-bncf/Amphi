@@ -904,7 +904,8 @@ class StudioHandler(AsrHandler):
                 return
             types = {".js": "application/javascript", ".css": "text/css; charset=utf-8",
                      ".woff2": "font/woff2", ".woff": "font/woff"}
-            self._send_file(target, types.get(target.suffix, "application/octet-stream"))
+            self._send_file(target, types.get(target.suffix, "application/octet-stream"),
+                            cache="public, max-age=604800")
             return
         if self.path.startswith("/search"):
             from urllib.parse import parse_qs, urlparse
@@ -921,7 +922,7 @@ class StudioHandler(AsrHandler):
             return
         super().do_GET()
 
-    def _send_file(self, path: Path, content_type: str) -> None:
+    def _send_file(self, path: Path, content_type: str, cache: str | None = None) -> None:
         if not path.exists():
             self._send(404, {"error": f"{path.name} introuvable"})
             return
@@ -929,6 +930,10 @@ class StudioHandler(AsrHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(blob)))
+        # L'interface change à chaque correctif : sans cet en-tête, le navigateur
+        # garde l'ancienne page et on croit que rien n'a été corrigé. Les
+        # ressources vendorisées, elles, ne bougent jamais — on les laisse en cache.
+        self.send_header("Cache-Control", cache or "no-store, must-revalidate")
         self.end_headers()
         self.wfile.write(blob)
 
