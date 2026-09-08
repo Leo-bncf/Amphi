@@ -64,8 +64,8 @@ une photo du tableau confirme ou complète ce qui est dit à l'oral, cite les de
 transcription : pas de complément de culture générale, pas de reformulation qui
 ajoute une information absente.
 
-Écris en français, dans la langue du cours. Garde les termes techniques anglais tels
-qu'ils sont prononcés. Structure hiérarchiquement. Extrais les définitions et les
+{LANGUAGE_RULE} Garde les termes techniques dans la langue où ils sont prononcés :
+un cours français qui dit « gradient boosting » garde « gradient boosting ». Structure hiérarchiquement. Extrais les définitions et les
 formules. Signale ce que l'enseignant présente comme important ou comme un piège.
 
 N'ÉCRIS PAS DE SECTION VIDE. Si l'enseignant annonce un titre sans rien développer
@@ -92,15 +92,7 @@ Réponds UNIQUEMENT par un objet JSON valide de cette forme :
   ],
   "glossary": [{"term":"...","definition":"...","sourceSegmentIds":["s4"]}]
 }
-`kind` vaut a-retenir, exemple, attention ou question-ouverte.
-
-ENRICHISSEMENT — activé uniquement quand la consigne le demande explicitement.
-Tu peux alors ajouter des blocs de type "enrichment" qui apportent ce qui manque au
-cours : définition d'un prérequis supposé connu, contre-exemple éclairant, rappel de
-notation. Ces blocs ne portent PAS de source, puisqu'ils ne viennent pas du cours —
-ils sont affichés séparément et signalés comme extérieurs. Reste sobre : deux à cinq
-blocs au maximum, et uniquement là où le cours laisse un vrai trou. Format :
-{"type":"enrichment","title":"...","text":"...","why":"pourquoi c'est utile ici"}"""
+`kind` vaut a-retenir, exemple, attention ou question-ouverte."""
 
 VISION_PROMPT = """Tu lis une photo prise pendant un cours : tableau, diapositive projetée, ou page de notes.
 
@@ -131,6 +123,32 @@ Contraintes de syntaxe, importantes car le rendu échoue sinon :
 Réponds uniquement par un objet JSON :
 {"mermaid": "flowchart TD\\n  A[\\"...\\"] --> B[\\"...\\"]", "title": "titre court", "explanation": "une phrase sur ce que montre le schéma"}"""
 
+ENRICH_PROMPT = """Tu aides un étudiant dont le cours a laissé des trous.
+
+On te donne la transcription d'une séance. Ton travail n'est PAS de la résumer — un
+autre passage s'en charge — mais d'identifier ce que l'enseignant a supposé connu sans
+l'expliquer, et de le combler. Un sigle lâché sans définition, un prérequis implicite,
+une notation jamais introduite, un concept mentionné puis abandonné.
+
+{LANGUAGE_RULE}
+
+Deux à cinq blocs, pas plus, et uniquement là où il y a un vrai trou. Si le cours se
+suffit à lui-même, renvoie une liste vide : mieux vaut ne rien ajouter que du remplissage.
+
+Cas particulier, fréquent : la séance est très courte, ou l'enseignant n'a fait
+qu'annoncer un sujet sans le traiter — « aujourd'hui, introduction au CPU et à la
+RAM », puis plus rien. Alors **le sujet annoncé est lui-même le trou** : introduis-le
+proprement, comme le ferait un manuel, en trois à cinq blocs. C'est exactement la
+situation où l'étudiant a le plus besoin de toi.
+
+Ajoute un schéma Mermaid seulement quand il éclaire vraiment — six à douze nœuds,
+libellés entre guillemets. La plupart des compléments n'en ont pas besoin.
+
+Réponds uniquement par :
+{"enrichments":[{"title":"...","text":"...","why":"pourquoi ça manque au cours",
+                 "mermaid":"flowchart TD\\n  A[\\"...\\"] --> B[\\"...\\"]"}]}
+Le champ "mermaid" est facultatif."""
+
 STOPWORDS = {
     "le", "la", "les", "de", "des", "du", "un", "une", "et", "ou", "que", "qui",
     "dans", "pour", "sur", "avec", "est", "sont", "ce", "cette", "ces", "on",
@@ -142,6 +160,37 @@ def content_words(text: str) -> set[str]:
     text = unicodedata.normalize("NFD", text.lower())
     text = "".join(c for c in text if unicodedata.category(c) != "Mn")
     return {w for w in re.sub(r"[^a-z0-9\s]", " ", text).split() if len(w) > 3 and w not in STOPWORDS}
+
+
+LANGUAGE_RULES = {
+    "fr": "Écris les notes en français.",
+    "en": "Write the notes in English.",
+    "es": "Escribe los apuntes en español.",
+    "de": "Schreibe die Notizen auf Deutsch.",
+    "it": "Scrivi gli appunti in italiano.",
+}
+
+
+def resolve_language(requested: str, segments: list[dict[str, Any]]) -> tuple[str, str]:
+    """
+    Langue des notes : celle du cours, pas celle du développeur.
+
+    Le prompt imposait « écris en français », ce qui produisait des notes
+    françaises sur un cours anglophone. La langue détectée par Whisper est la
+    source de vérité par défaut, et l'utilisateur peut toujours forcer.
+    """
+    code = (requested or "auto").lower()
+    if code == "auto":
+        votes: dict[str, int] = {}
+        for seg in segments:
+            lang = (seg.get("lang") or "").lower()[:2]
+            if lang:
+                votes[lang] = votes.get(lang, 0) + 1
+        code = max(votes, key=votes.__getitem__) if votes else "fr"
+    rule = LANGUAGE_RULES.get(code)
+    if rule is None:
+        rule = f"Write the notes in the same language as the course (code: {code})."
+    return code, rule
 
 
 def drop_hollow_headings(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -246,7 +295,7 @@ def local_llm_available() -> bool:
     return cache.exists() and not any(cache.rglob("*.incomplete"))
 
 
-def generate_local(transcript: str) -> tuple[dict[str, Any], dict[str, int], float]:
+def generate_local(transcript: str, language_rule: str = "Écris les notes en français.") -> tuple[dict[str, Any], dict[str, int], float]:
     """
     Génération sans compte ni clé — ADR-16, la moitié locale.
 
@@ -264,7 +313,7 @@ def generate_local(transcript: str) -> tuple[dict[str, Any], dict[str, int], flo
 
     prompt = tokenizer.apply_chat_template(
         [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": SYSTEM_PROMPT.replace("{LANGUAGE_RULE}", language_rule)},
             {"role": "user", "content": transcript},
         ],
         add_generation_prompt=True,
@@ -343,6 +392,38 @@ def mistral_vision_text(api_key: str, data_url: str) -> tuple[str, dict[str, int
         payload.get("usage", {}),
         latency_ms,
     )
+
+
+def generate_enrichments(
+    api_key: str, transcript: str, language_rule: str
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """
+    Second appel, dédié aux compléments hors cours.
+
+    Le faire dans le même appel que les notes ne marche pas : « n'invente rien,
+    n'écris pas de section creuse » et « ajoute ce qui manque » sont deux
+    consignes contradictoires, et le modèle finit par n'obéir qu'à la première.
+    Deux appels, deux métiers. Le surcoût est de l'ordre du millième d'euro.
+    """
+    try:
+        doc, usage, _ = mistral_chat(
+            api_key,
+            [
+                {"role": "system", "content": ENRICH_PROMPT.replace("{LANGUAGE_RULE}", language_rule)},
+                {"role": "user", "content": transcript},
+            ],
+            max_tokens=2500,
+        )
+    except Exception:  # noqa: BLE001 — un complément raté ne doit pas perdre les notes
+        LOG.exception("génération des compléments")
+        return [], {}
+    # Le modèle renvoie tantôt {"enrichments":[...]}, tantôt le tableau nu.
+    # Accepter les deux coûte trois lignes ; l'imposer coûte des générations perdues.
+    if isinstance(doc, list):
+        out = doc
+    else:
+        out = doc.get("enrichments") or doc.get("enrichment") or []
+    return [e for e in out if isinstance(e, dict) and (e.get("text") or "").strip()][:5], usage
 
 
 def call_mistral(api_key: str, transcript: str) -> tuple[dict[str, Any], dict[str, int], float]:
@@ -533,6 +614,7 @@ class StudioHandler(AsrHandler):
         segments = payload.get("segments") or []
         attachments = payload.get("attachments") or []
         enrich = bool(payload.get("enrich"))
+        lang_code, lang_rule = resolve_language(payload.get("language", "auto"), segments)
         # §6.4 : une génération ne réécrit jamais ce qu'un humain a touché.
         keep = payload.get("keepEdited") or []
 
@@ -546,11 +628,6 @@ class StudioHandler(AsrHandler):
             parts.append(
                 "DOCUMENTS FOURNIS — photos du tableau, diapositives, notes collées\n"
                 + "\n\n".join(f"[a{i}] {a['name']}\n{a['text']}" for i, a in enumerate(attachments))
-            )
-        if enrich:
-            parts.append(
-                "CONSIGNE : ajoute des blocs \"enrichment\" là où le cours suppose un "
-                "prérequis non expliqué. Deux à cinq au maximum."
             )
         if keep:
             parts.append(
@@ -568,7 +645,7 @@ class StudioHandler(AsrHandler):
                 doc, usage, latency_ms = mistral_chat(
                     api_key,
                     [
-                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "system", "content": SYSTEM_PROMPT.replace("{LANGUAGE_RULE}", lang_rule)},
                         {"role": "user", "content": "\n\n".join(parts)},
                     ],
                 )
@@ -587,7 +664,7 @@ class StudioHandler(AsrHandler):
             if not local_llm_available():
                 self._send(503, {"error": " ".join(problems) + f" Modèle local ({LOCAL_LLM_MODEL}) pas encore téléchargé."})
                 return
-            doc, usage, latency_ms = generate_local("\n\n".join(parts))
+            doc, usage, latency_ms = generate_local("\n\n".join(parts), lang_rule)
             engine = LOCAL_LLM_MODEL.split("/")[-1] + " (local)"
 
         kept, rejected, enrichments = [], 0, []
@@ -610,10 +687,21 @@ class StudioHandler(AsrHandler):
         # niveau plutôt que parmi les blocs. On accepte les deux formes : imposer
         # une seule façon de répondre à un petit modèle, c'est perdre du contenu
         # valide pour une question de forme.
+        # Les compléments viennent d'un appel séparé (voir generate_enrichments).
+        # On accepte aussi la forme en ligne, au cas où le modèle en glisse.
         if enrich:
             for extra in doc.get("enrichments") or doc.get("enrichment") or []:
                 if isinstance(extra, dict) and (extra.get("text") or "").strip():
                     enrichments.append(extra)
+            if api_key != "":
+                extra_blocks, extra_usage = generate_enrichments(api_key, "\n\n".join(parts), lang_rule)
+                enrichments.extend(extra_blocks)
+                # Le second appel compte dans la facture : l'afficher à part
+                # reviendrait à sous-estimer le coût réel d'une génération.
+                usage = {
+                    "prompt_tokens": usage.get("prompt_tokens", 0) + extra_usage.get("prompt_tokens", 0),
+                    "completion_tokens": usage.get("completion_tokens", 0) + extra_usage.get("completion_tokens", 0),
+                }
 
         kept = drop_hollow_headings(kept)
 
@@ -634,6 +722,7 @@ class StudioHandler(AsrHandler):
                 "enrichments": enrichments,
                 "glossary": glossary,
                 "rejectedBlocks": rejected,
+                "language": lang_code,
                 "model": engine,
                 "costEuros": "0,0000 € (local)" if usage.get("prompt_tokens", 0) == 0 else f"{cost / 1000:.4f} €",
                 "latencyMs": round(latency_ms),
@@ -656,7 +745,9 @@ class StudioHandler(AsrHandler):
         if api_key == "":
             raise ValueError("MISTRAL_API_KEY absente : la génération de schémas en a besoin")
 
-        user = context if instruction == "" else f"Consigne : {instruction}\n\nPassage :\n{context}"
+        lang_rule = LANGUAGE_RULES.get(str(payload.get("language") or "fr")[:2], LANGUAGE_RULES["fr"])
+        prefix = f"{lang_rule} Les libellés du schéma doivent être dans cette langue.\n\n"
+        user = prefix + (context if instruction == "" else f"Consigne : {instruction}\n\nPassage :\n{context}")
         doc, usage, latency_ms = mistral_chat(
             api_key,
             [{"role": "system", "content": DIAGRAM_PROMPT}, {"role": "user", "content": user}],

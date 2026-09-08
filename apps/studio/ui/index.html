@@ -6,78 +6,74 @@
 <title>Amphi — Studio</title>
 <style>
   :root {
-    --bg: #f4f2ee; --paper: #fffdfa; --surface: #fff; --line: #e2ddd4; --line-soft: #efebe3;
-    --ink: #1b1916; --ink-soft: #46423c; --muted: #7a746a;
-    --accent: #a63f24; --accent-soft: #fbeee9;
-    --edit: #2c6349; --edit-soft: #eaf3ee;
-    --add: #4a4d8f; --add-soft: #eeeef8;
-    --warn: #8d6212;
+    --bg: #f2efe9; --paper: #fffefb; --surface: #fff; --line: #e0dad0; --hair: #efeae2;
+    --ink: #191713; --ink-soft: #423e37; --muted: #7b756a;
+    --accent: #9d3a1f; --accent-tint: #fbeeea; --accent-deep: #6f2814;
+    --gold: #9a7318; --gold-tint: #fbf3e0;
+    --edit: #2a6146; --edit-tint: #e9f2ec;
+    --add: #414383; --add-tint: #edeef8;
     --mono: ui-monospace, "SF Mono", Menlo, monospace;
-    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #14130f; --paper: #1c1b17; --surface: #211f1b; --line: #35322b; --line-soft: #2a2823;
-      --ink: #ece7dd; --ink-soft: #c8c2b6; --muted: #948d80;
-      --accent: #e0764f; --accent-soft: #2a1e18;
-      --edit: #7cba98; --edit-soft: #17241d;
-      --add: #9a9de0; --add-soft: #1d1d2b; --warn: #d0a659;
+      --bg: #131210; --paper: #1b1a16; --surface: #201e1a; --line: #363228; --hair: #2b2822;
+      --ink: #efeade; --ink-soft: #cbc5b8; --muted: #968f81;
+      --accent: #e0774f; --accent-tint: #2a1c15; --accent-deep: #f0a685;
+      --gold: #d3a651; --gold-tint: #262013;
+      --edit: #77b795; --edit-tint: #16231c;
+      --add: #9295e2; --add-tint: #1b1b28;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--sans); }
 
-  header { border-bottom: 1px solid var(--line); padding: 11px 20px; display: flex; align-items: center;
+  header { border-bottom: 1px solid var(--line); padding: 10px 20px; display: flex; align-items: center;
            gap: 12px; position: sticky; top: 0; background: var(--bg); z-index: 30; }
   header h1 { font-size: 15px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
-  .tabs { display: flex; gap: 3px; background: var(--line-soft); padding: 3px; border-radius: 8px; }
+  .tabs { display: flex; gap: 3px; background: var(--hair); padding: 3px; border-radius: 8px; }
   .tabs button { border: 0; background: transparent; padding: 5px 13px; border-radius: 6px;
                  font-size: 13px; color: var(--muted); cursor: pointer; }
-  .tabs button.on { background: var(--surface); color: var(--ink); font-weight: 600;
-                    box-shadow: 0 1px 2px rgba(0,0,0,.07); }
+  .tabs button.on { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
   header .spacer { flex: 1; }
   #saveState { color: var(--edit); font-size: 12px; }
   #engine { color: var(--muted); font-size: 11px; font-family: var(--mono); }
 
-  main { max-width: 1360px; margin: 0 auto; padding: 18px 20px 60px; }
+  main { max-width: 1360px; margin: 0 auto; padding: 18px 20px 70px; }
   .grid { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; align-items: start; }
   @media (max-width: 1040px) { .grid { grid-template-columns: 1fr; } }
   .full { grid-column: 1 / -1; }
   .hidden { display: none !important; }
 
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 15px; }
-  .card h2 { margin: 0 0 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
-             color: var(--muted); font-weight: 700; }
+  .card h2 { margin: 0 0 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
   .card .hint { color: var(--muted); font-size: 12.5px; margin: 0 0 11px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
-  button { font: inherit; cursor: pointer; border-radius: 7px; border: 1px solid var(--line);
-           background: var(--surface); color: var(--ink); padding: 6px 12px; }
+  button, select { font: inherit; cursor: pointer; border-radius: 7px; border: 1px solid var(--line);
+                   background: var(--surface); color: var(--ink); padding: 6px 12px; }
   button:hover:not(:disabled) { border-color: var(--accent); }
   button:disabled { opacity: .38; cursor: not-allowed; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
   button.sm { padding: 4px 9px; font-size: 12px; }
   button.ghost { border-color: transparent; color: var(--muted); }
-  label.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
-                 color: var(--muted); cursor: pointer; }
+  label.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
 
-  /* ---------------- bibliothèque ---------------- */
   .lib { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
-  .doc { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 15px;
-         cursor: pointer; transition: border-color .12s, transform .12s; position: relative; }
+  .doc { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0;
+         cursor: pointer; transition: border-color .12s, transform .12s; position: relative; overflow: hidden; }
   .doc:hover { border-color: var(--accent); transform: translateY(-1px); }
-  .doc h3 { margin: 0 0 6px; font-size: 15.5px; font-family: var(--serif); line-height: 1.3; }
+  .doc .band { height: 5px; background: linear-gradient(90deg, var(--accent), var(--gold)); }
+  .doc .body { padding: 14px 15px 15px; }
+  .doc h3 { margin: 0 0 6px; font-size: 16px; font-family: var(--serif); line-height: 1.3; color: var(--ink); }
   .doc .meta { font-size: 12px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
-  .doc .del { position: absolute; top: 9px; right: 9px; opacity: 0; }
+  .doc .del { position: absolute; top: 11px; right: 9px; opacity: 0; }
   .doc:hover .del { opacity: 1; }
 
-  /* ---------------- capture ---------------- */
-  #recBtn { width: 62px; height: 62px; border-radius: 50%; font-size: 22px; padding: 0; flex: none;
-            display: grid; place-items: center; }
-  #recBtn.recording { background: var(--accent); border-color: var(--accent); color: #fff;
-                      animation: pulse 1.7s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(166,63,36,.4); } 50% { box-shadow: 0 0 0 12px rgba(166,63,36,0); } }
+  #recBtn { width: 62px; height: 62px; border-radius: 50%; font-size: 22px; padding: 0; flex: none; display: grid; place-items: center; }
+  #recBtn.recording { background: var(--accent); border-color: var(--accent); color: #fff; animation: pulse 1.7s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(157,58,31,.4); } 50% { box-shadow: 0 0 0 12px rgba(157,58,31,0); } }
   @media (prefers-reduced-motion: reduce) { #recBtn.recording { animation: none; } }
   #timer { font-family: var(--mono); font-size: 24px; font-variant-numeric: tabular-nums; }
   #status { color: var(--muted); font-size: 12.5px; min-height: 1.4em; }
@@ -87,101 +83,134 @@
 
   .scroll { max-height: 380px; overflow-y: auto; }
   .seg { padding: 3px 6px; border-radius: 5px; display: flex; gap: 9px; align-items: baseline; font-size: 14px; }
-  .seg:hover { background: var(--accent-soft); }
-  .seg.playing { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
-  .seg time { font-family: var(--mono); font-size: 11.5px; color: var(--accent); cursor: pointer;
-              flex: none; font-variant-numeric: tabular-nums; }
-  .seg.low { border-left: 2px solid var(--warn); }
+  .seg:hover { background: var(--accent-tint); }
+  .seg.playing { background: var(--accent-tint); box-shadow: inset 2px 0 0 var(--accent); }
+  .seg time { font-family: var(--mono); font-size: 11.5px; color: var(--accent); cursor: pointer; flex: none; font-variant-numeric: tabular-nums; }
+  .seg.low { border-left: 2px solid var(--gold); }
 
-  #drop { border: 1.5px dashed var(--line); border-radius: 9px; padding: 16px; text-align: center;
-          color: var(--muted); font-size: 12.5px; cursor: pointer; }
-  #drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  #drop { border: 1.5px dashed var(--line); border-radius: 9px; padding: 16px; text-align: center; color: var(--muted); font-size: 12.5px; cursor: pointer; }
+  #drop.over { border-color: var(--accent); background: var(--accent-tint); }
   .att { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
   .att .top { display: flex; gap: 8px; align-items: center; font-size: 12.5px; }
   .att .top b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .att .tag { font-size: 10.5px; font-family: var(--mono); color: var(--muted); }
-  .att pre { margin: 7px 0 0; font-size: 11.5px; white-space: pre-wrap; max-height: 110px;
-             overflow-y: auto; color: var(--muted); font-family: var(--mono); }
+  .att pre { margin: 7px 0 0; font-size: 11.5px; white-space: pre-wrap; max-height: 110px; overflow-y: auto; color: var(--muted); font-family: var(--mono); }
   .att img { max-width: 100%; border-radius: 6px; margin-top: 7px; }
 
-  /* ---------------- la feuille de notes ---------------- */
-  #sheet { background: var(--paper); border: 1px solid var(--line); border-radius: 12px;
-           padding: 44px 52px 52px; font-family: var(--serif); font-size: 16.5px; line-height: 1.68;
-           color: var(--ink-soft); max-width: 78ch; margin: 0 auto; }
-  @media (max-width: 700px) { #sheet { padding: 26px 22px; } }
-  #sheet .doctitle { font-size: 27px; line-height: 1.2; margin: 0 0 4px; color: var(--ink);
-                     font-weight: 600; letter-spacing: -0.015em; text-wrap: balance; }
-  #sheet .docmeta { font-family: var(--sans); font-size: 12px; color: var(--muted);
-                    padding-bottom: 18px; border-bottom: 1px solid var(--line-soft); margin-bottom: 22px; }
-  #sheet .lede { font-size: 17px; color: var(--ink); margin: 0 0 26px; }
-  #sheet h2 { font-size: 20px; margin: 32px 0 8px; color: var(--ink); font-weight: 600;
-              letter-spacing: -0.01em; text-wrap: balance; }
-  #sheet h3 { font-size: 17px; margin: 22px 0 5px; color: var(--ink); font-weight: 600; }
-  #sheet p { margin: 11px 0; }
-  #sheet ul { margin: 11px 0; padding-left: 22px; }
-  #sheet li { margin: 4px 0; }
+  /* ============================ LA FEUILLE ============================ */
+  #sheet { background: var(--paper); border: 1px solid var(--line); border-radius: 14px;
+           box-shadow: 0 1px 3px rgba(0,0,0,.05), 0 12px 32px -18px rgba(0,0,0,.22);
+           font-family: var(--serif); font-size: 17px; line-height: 1.7; color: var(--ink-soft);
+           max-width: 74ch; margin: 0 auto; overflow: hidden; }
+  .sheetInner { padding: 0 56px 56px; }
+  @media (max-width: 700px) { .sheetInner { padding: 0 22px 34px; } }
 
-  .blk { border-radius: 5px; padding: 2px 6px; margin-left: -6px; margin-right: -6px; }
-  .blk[contenteditable="true"]:hover { background: var(--accent-soft); }
-  .blk[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-offset: 2px;
-                                        background: var(--surface); }
-  .blk.edited { box-shadow: inset 3px 0 0 var(--edit); background: var(--edit-soft); }
+  .cover { padding: 40px 56px 26px; background: linear-gradient(160deg, var(--accent-tint) 0%, transparent 62%);
+           border-bottom: 1px solid var(--hair); margin-bottom: 30px; }
+  @media (max-width: 700px) { .cover { padding: 28px 22px 20px; } }
+  .cover .kicker { font-family: var(--sans); font-size: 10.5px; font-weight: 700; letter-spacing: .16em;
+                   text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+  .cover .doctitle { font-size: 32px; line-height: 1.14; margin: 0; color: var(--ink); font-weight: 600;
+                     letter-spacing: -0.02em; text-wrap: balance; }
+  .cover .rule { width: 54px; height: 3px; background: var(--accent); border-radius: 2px; margin: 16px 0 14px; }
+  .cover .docmeta { font-family: var(--sans); font-size: 12px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
 
-  .anchor { font-family: var(--mono); font-size: 10.5px; color: var(--accent); cursor: pointer;
-            opacity: .55; user-select: none; vertical-align: super; margin-left: 4px; }
-  .anchor:hover { opacity: 1; }
-  .anchor.att { color: var(--muted); cursor: default; }
+  .lede { font-size: 18.5px; line-height: 1.62; color: var(--ink); margin: 0 0 30px;
+          padding-left: 18px; border-left: 3px solid var(--gold); }
 
-  .def { margin: 16px 0; padding: 2px 0 2px 16px; border-left: 3px solid var(--accent); }
-  .def .term { font-weight: 700; color: var(--ink); }
-  .callout { margin: 18px 0; padding: 13px 16px; border-radius: 8px; background: var(--surface);
-             border: 1px solid var(--line); }
+  .sec { display: flex; align-items: baseline; gap: 13px; margin: 40px 0 10px; }
+  .sec .num { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--accent);
+              letter-spacing: .04em; flex: none; padding-top: 5px; }
+  .sec h2 { font-size: 22px; margin: 0; color: var(--ink); font-weight: 600; letter-spacing: -0.015em;
+            text-wrap: balance; line-height: 1.25; flex: 1; }
+  #sheet h3 { font-size: 17.5px; margin: 24px 0 5px; color: var(--ink); font-weight: 600; }
+  #sheet p { margin: 12px 0; }
+  #sheet ul { margin: 12px 0; padding-left: 4px; list-style: none; }
+  #sheet li { margin: 7px 0; padding-left: 20px; position: relative; }
+  #sheet li::before { content: ""; position: absolute; left: 4px; top: .68em; width: 5px; height: 5px;
+                      border-radius: 50%; background: var(--accent); opacity: .55; }
+
+  .blk { border-radius: 6px; padding: 2px 7px; margin-left: -7px; margin-right: -7px; }
+  .blk[contenteditable="true"]:hover { background: var(--accent-tint); }
+  .blk[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-offset: 2px; background: var(--surface); }
+  .blk.edited { box-shadow: inset 3px 0 0 var(--edit); background: var(--edit-tint); }
+  .srcable { cursor: pointer; }
+
+  .def { margin: 20px 0; padding: 15px 18px; background: var(--surface); border: 1px solid var(--line);
+         border-radius: 10px; border-left: 3px solid var(--accent); }
+  .def .term { display: inline-block; font-family: var(--sans); font-size: 11px; font-weight: 700;
+               letter-spacing: .07em; text-transform: uppercase; color: #fff; background: var(--accent);
+               padding: 3px 9px; border-radius: 20px; margin-bottom: 8px; }
+  .def .body { display: block; }
+
+  .callout { margin: 22px 0; padding: 15px 18px 15px 52px; border-radius: 10px; position: relative;
+             background: var(--surface); border: 1px solid var(--line); }
+  .callout .ico { position: absolute; left: 16px; top: 15px; width: 24px; height: 24px; border-radius: 50%;
+                  display: grid; place-items: center; font-family: var(--sans); font-size: 13px; font-weight: 700; color: #fff; }
   .callout .lbl { font-family: var(--sans); font-size: 10px; font-weight: 700; text-transform: uppercase;
-                  letter-spacing: .1em; display: block; margin-bottom: 5px; color: var(--muted); }
-  .callout.a-retenir { background: var(--accent-soft); border-color: var(--accent); }
-  .callout.a-retenir .lbl { color: var(--accent); }
-  .callout.attention { border-left: 3px solid var(--warn); }
-  .callout.attention .lbl { color: var(--warn); }
+                  letter-spacing: .12em; display: block; margin-bottom: 4px; }
+  .callout.a-retenir { background: var(--accent-tint); border-color: var(--accent); }
+  .callout.a-retenir .ico { background: var(--accent); }
+  .callout.a-retenir .lbl { color: var(--accent-deep); }
+  .callout.attention { background: var(--gold-tint); border-color: var(--gold); }
+  .callout.attention .ico { background: var(--gold); }
+  .callout.attention .lbl { color: var(--gold); }
+  .callout.exemple .ico { background: var(--muted); }
+  .callout.exemple .lbl { color: var(--muted); }
+  .callout.question-ouverte { border-style: dashed; }
+  .callout.question-ouverte .ico { background: var(--add); }
+  .callout.question-ouverte .lbl { color: var(--add); }
 
-  .enrich { margin: 18px 0; padding: 13px 16px; border-radius: 8px; background: var(--add-soft);
-            border: 1px dashed var(--add); }
+  .enrich { margin: 22px 0; padding: 15px 18px; border-radius: 10px; background: var(--add-tint); border: 1px dashed var(--add); }
   .enrich .lbl { font-family: var(--sans); font-size: 10px; font-weight: 700; text-transform: uppercase;
-                 letter-spacing: .1em; color: var(--add); display: block; margin-bottom: 5px; }
-  .enrich .why { font-family: var(--sans); font-size: 12px; color: var(--muted); margin-top: 7px; }
+                 letter-spacing: .12em; color: var(--add); display: block; margin-bottom: 5px; }
+  .enrich .why { font-family: var(--sans); font-size: 12px; color: var(--muted); margin-top: 8px; font-style: italic; }
 
-  .gloss { margin-top: 34px; padding-top: 20px; border-top: 1px solid var(--line-soft); }
-  .gloss dt { font-weight: 700; color: var(--ink); margin-top: 11px; }
-  .gloss dd { margin: 2px 0 0; padding-left: 0; }
+  figure { margin: 24px 0; }
+  figure img { width: 100%; border-radius: 10px; border: 1px solid var(--line); display: block; }
+  figure figcaption { font-family: var(--sans); font-size: 12px; color: var(--muted); margin-top: 7px; text-align: center; }
+  .imgwrap { position: relative; }
+  .imgwrap .del { position: absolute; top: 8px; right: 8px; opacity: 0; }
+  .imgwrap:hover .del { opacity: 1; }
 
-  .diagram { margin: 22px 0; padding: 14px; border: 1px solid var(--line); border-radius: 9px;
-             background: var(--surface); }
+  .gloss { margin-top: 40px; padding-top: 24px; border-top: 2px solid var(--hair); }
+  .gloss .gtitle { font-family: var(--sans); font-size: 11px; font-weight: 700; letter-spacing: .14em;
+                   text-transform: uppercase; color: var(--muted); margin-bottom: 14px; }
+  .gloss dl { margin: 0; }
+  .gloss dt { font-weight: 700; color: var(--ink); margin-top: 13px; font-size: 16px; }
+  .gloss dd { margin: 1px 0 0; font-size: 15.5px; }
+
+  .diagram { margin: 26px 0; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
   .diagram h4 { font-family: var(--sans); font-size: 13px; margin: 0 0 3px; color: var(--ink); }
-  .diagram .cap { font-family: var(--sans); font-size: 12px; color: var(--muted); margin: 0 0 9px; }
+  .diagram .cap { font-family: var(--sans); font-size: 12px; color: var(--muted); margin: 0 0 10px; }
   .diagram .render { overflow-x: auto; text-align: center; }
   .diagram textarea { width: 100%; font-family: var(--mono); font-size: 11.5px; border: 1px solid var(--line);
-                      border-radius: 6px; padding: 8px; background: var(--bg); color: var(--ink);
-                      min-height: 90px; resize: vertical; }
+                      border-radius: 6px; padding: 8px; background: var(--bg); color: var(--ink); min-height: 90px; resize: vertical; }
 
-  .stats { display: flex; gap: 16px; flex-wrap: wrap; font-family: var(--sans); font-size: 11.5px;
-           color: var(--muted); margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; font-family: var(--sans); font-size: 11.5px; color: var(--muted);
+           margin-top: 30px; padding-top: 12px; border-top: 1px solid var(--hair); }
   .stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
-  .empty { color: var(--muted); font-size: 14px; padding: 30px 0; text-align: center; font-family: var(--sans); }
+  .empty { color: var(--muted); font-size: 14px; padding: 44px 20px; text-align: center; font-family: var(--sans); }
   .err { color: var(--accent); font-size: 13px; }
 
-  /* ---------------- impression ---------------- */
   @media print {
-    @page { margin: 17mm 16mm; }
-    header, .noprint, #transcriptCard, #docsCard, #recCard, .anchor, .del, button { display: none !important; }
-    body { background: #fff; color: #000; font-size: 11pt; }
+    @page { margin: 16mm 15mm; }
+    header, .noprint, #transcriptCard, #docsCard, #recCard, .del, button, select { display: none !important; }
+    body { background: #fff; color: #000; font-size: 10.5pt; }
     main { max-width: none; padding: 0; }
-    #sheet { border: 0; padding: 0; max-width: none; background: #fff; color: #000; box-shadow: none; }
-    #sheet .doctitle { font-size: 21pt; }
-    #sheet h2 { font-size: 14pt; margin-top: 18pt; break-after: avoid; }
+    #sheet { border: 0; box-shadow: none; max-width: none; background: #fff; border-radius: 0; }
+    .sheetInner { padding: 0; }
+    .cover { padding: 0 0 14pt; background: none; border-bottom: 1.5pt solid #000; margin-bottom: 18pt; }
+    .cover .doctitle { font-size: 22pt; }
+    .cover .rule { background: #000; }
+    .sec { margin-top: 20pt; break-after: avoid; }
+    .sec h2 { font-size: 14pt; }
     #sheet h3 { font-size: 12pt; break-after: avoid; }
-    .blk, .def, .callout, .enrich, .diagram { break-inside: avoid; box-shadow: none; }
-    .callout, .enrich { border: 1px solid #999; background: #fff; }
-    .enrich { border-style: dashed; }
-    .def { border-left: 2px solid #666; }
+    .blk, .def, .callout, .enrich, .diagram, figure { break-inside: avoid; box-shadow: none; }
+    .def, .callout, .enrich { background: #fff !important; border: 1px solid #888 !important; }
+    .callout .ico { background: #666 !important; }
+    .def .term { background: #fff; color: #000; border: 1px solid #000; }
+    .enrich { border-style: dashed !important; }
     .stats { display: none; }
   }
 </style>
@@ -189,26 +218,19 @@
 <body>
 <header>
   <h1>Amphi</h1>
-  <div class="tabs">
-    <button id="tabLib" class="on">Bibliothèque</button>
-    <button id="tabSes">Séance</button>
-  </div>
-  <span class="spacer"></span>
-  <span id="saveState"></span>
-  <span id="engine">connexion…</span>
+  <div class="tabs"><button id="tabLib" class="on">Bibliothèque</button><button id="tabSes">Séance</button></div>
+  <span class="spacer"></span><span id="saveState"></span><span id="engine">connexion…</span>
 </header>
 
 <main>
-  <!-- ============ BIBLIOTHÈQUE ============ -->
   <section id="viewLib">
     <div class="row" style="margin-bottom:14px">
       <button class="primary" id="newBtn">Nouvelle séance</button>
-      <span class="hint" style="margin:0">Tes séances enregistrées. Clique pour rouvrir, relire, imprimer.</span>
+      <span class="hint" style="margin:0">Clique une séance pour la rouvrir, la compléter, y ajouter des images, l'imprimer.</span>
     </div>
     <div id="lib" class="lib"></div>
   </section>
 
-  <!-- ============ SÉANCE ============ -->
   <section id="viewSes" class="hidden">
     <div class="grid">
       <div class="card full noprint" id="recCard">
@@ -220,7 +242,7 @@
           </div>
           <div id="levelWrap"></div>
           <input id="docTitle" placeholder="Nom de la séance" style="font:inherit;padding:7px 11px;
-                 border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);min-width:210px" />
+                 border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);min-width:200px" />
         </div>
         <audio id="player" controls hidden></audio>
       </div>
@@ -229,12 +251,12 @@
         <h2>Transcription</h2>
         <p class="hint">Clique un horodatage pour sauter au passage.</p>
         <div id="transcript" class="scroll"><div class="empty">Rien encore.</div></div>
-        <div class="stats" id="tStats" hidden></div>
+        <div class="stats" id="tStats" hidden style="margin-top:11px"></div>
       </div>
 
       <div class="card noprint" id="docsCard">
-        <h2>Documents</h2>
-        <p class="hint">Photo du tableau, diapositive, texte collé. Le contenu devient une source citable.</p>
+        <h2>Sources</h2>
+        <p class="hint">Photo du tableau, diapositive, texte collé : sert de matière aux notes. Pour insérer une image <em>dans</em> les notes, utilise « Ajouter une image ».</p>
         <div id="drop">Dépose une image ou un fichier texte — ou clique pour choisir</div>
         <input type="file" id="fileInput" accept="image/*,.txt,.md" multiple hidden />
         <div class="row" style="margin-top:8px"><button class="sm" id="pasteBtn">Coller du texte</button></div>
@@ -242,10 +264,16 @@
       </div>
 
       <div class="full">
-        <div class="row noprint" style="margin-bottom:14px">
+        <div class="row noprint" style="margin-bottom:12px">
           <button id="notesBtn" class="primary" disabled>Générer les notes</button>
-          <label class="toggle"><input type="checkbox" id="enrichChk" /> compléter les prérequis manquants</label>
-          <button id="diagBtn" disabled>Faire un schéma</button>
+          <select id="langSel" title="Langue des notes">
+            <option value="auto">Langue : auto</option><option value="fr">Français</option>
+            <option value="en">English</option><option value="es">Español</option><option value="de">Deutsch</option>
+          </select>
+          <label class="toggle"><input type="checkbox" id="enrichChk" /> compléter les prérequis</label>
+          <button id="diagBtn" disabled>Schéma</button>
+          <button id="imgBtn" disabled>Ajouter une image</button>
+          <input type="file" id="imgInput" accept="image/*" multiple hidden />
           <span style="flex:1"></span>
           <button id="mdBtn" class="sm" disabled>Markdown</button>
           <button id="printBtn" class="sm" disabled>Imprimer / PDF</button>
@@ -262,25 +290,23 @@
 <script type="module">
 const mermaid = globalThis.mermaid;
 const $ = (id) => document.getElementById(id);
-const dark = matchMedia("(prefers-color-scheme: dark)").matches;
-mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "neutral", securityLevel: "strict" });
+mermaid.initialize({ startOnLoad: false, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "neutral",
+                     securityLevel: "strict" });
 
-const state = { id: null, title: "", rec: null, chunks: [], startedAt: 0, timer: null,
-                segments: [], attachments: [], doc: null, diagrams: [], blobUrl: null, dirty: false };
+const state = { id: null, rec: null, chunks: [], startedAt: 0, timer: null,
+                segments: [], attachments: [], doc: null, diagrams: [], images: [], blobUrl: null, dirty: false };
 
 const fmt = (ms) => { const s = Math.floor(ms / 1000);
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const slug = (s) => (s || "seance").normalize("NFD").replace(/[̀-ͯ]/g, "")
   .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "seance";
+const ICONS = { "a-retenir": "★", attention: "!", exemple: "→", "question-ouverte": "?" };
 
-// ---------------------------------------------------------------- vues
-function show(view) {
-  $("viewLib").classList.toggle("hidden", view !== "lib");
-  $("viewSes").classList.toggle("hidden", view !== "ses");
-  $("tabLib").classList.toggle("on", view === "lib");
-  $("tabSes").classList.toggle("on", view === "ses");
-  if (view === "lib") loadLibrary();
+function show(v) {
+  $("viewLib").classList.toggle("hidden", v !== "lib"); $("viewSes").classList.toggle("hidden", v !== "ses");
+  $("tabLib").classList.toggle("on", v === "lib"); $("tabSes").classList.toggle("on", v === "ses");
+  if (v === "lib") loadLibrary();
 }
 $("tabLib").onclick = () => show("lib");
 $("tabSes").onclick = () => show("ses");
@@ -288,66 +314,59 @@ $("tabSes").onclick = () => show("ses");
 async function checkEngine() {
   try {
     const h = await (await fetch("/health")).json();
-    $("engine").textContent = h.warm
-      ? `${h.model.split("/").pop()} · ${h.batteryPercent === null ? "secteur" : h.batteryPercent + "%"}`
-      : "chargement du modèle…";
+    $("engine").textContent = h.warm ? `${h.model.split("/").pop()} · ${h.batteryPercent === null ? "secteur" : h.batteryPercent + "%"}` : "chargement…";
     if (!h.warm) setTimeout(checkEngine, 2000);
   } catch { $("engine").textContent = "serveur injoignable"; }
 }
 checkEngine();
 
-// ---------------------------------------------------------- bibliothèque
+// ------------------------------------------------------- bibliothèque
 async function loadLibrary() {
   const { docs } = await (await fetch("/docs")).json();
   const host = $("lib");
-  if (!docs.length) { host.innerHTML = `<div class="empty">Aucune séance enregistrée pour l'instant.</div>`; return; }
+  if (!docs.length) { host.innerHTML = `<div class="empty">Aucune séance enregistrée.</div>`; return; }
   host.innerHTML = "";
   for (const d of docs) {
-    const card = document.createElement("article");
-    card.className = "doc";
+    const el = document.createElement("article"); el.className = "doc";
     const when = d.savedAt ? new Date(d.savedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "";
-    card.innerHTML = `<button class="sm ghost del" title="Supprimer">✕</button>
-      <h3>${esc(d.title)}</h3>
-      <div class="meta"><span>${when}</span><span>${d.blocks} blocs</span>
-      ${d.diagrams ? `<span>${d.diagrams} schéma(s)</span>` : ""}
-      ${d.attachments ? `<span>${d.attachments} document(s)</span>` : ""}</div>`;
-    card.onclick = () => openDoc(d.id);
-    card.querySelector(".del").onclick = async (e) => {
+    el.innerHTML = `<div class="band"></div><button class="sm ghost del" title="Supprimer">✕</button>
+      <div class="body"><h3>${esc(d.title)}</h3><div class="meta"><span>${when}</span>
+      <span>${d.blocks} blocs</span>${d.diagrams ? `<span>${d.diagrams} schéma(s)</span>` : ""}
+      ${d.attachments ? `<span>${d.attachments} source(s)</span>` : ""}</div></div>`;
+    el.onclick = () => openDoc(d.id);
+    el.querySelector(".del").onclick = async (e) => {
       e.stopPropagation();
       if (!confirm(`Supprimer « ${d.title} » ? C'est définitif.`)) return;
-      await fetch("/delete", { method: "POST", headers: { "Content-Type": "application/json" },
-                               body: JSON.stringify({ id: d.id }) });
+      await fetch("/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: d.id }) });
       loadLibrary();
     };
-    host.appendChild(card);
+    host.appendChild(el);
   }
 }
 
 async function openDoc(id) {
-  const saved = await (await fetch(`/load?id=${encodeURIComponent(id)}`)).json();
-  if (saved.empty) return;
-  state.id = id;
-  state.segments = saved.segments ?? [];
-  state.attachments = saved.attachments ?? [];
-  state.doc = saved.doc ?? null;
-  state.diagrams = saved.diagrams ?? [];
-  state.title = saved.doc?.title ?? "";
-  $("docTitle").value = state.title;
+  const s = await (await fetch(`/load?id=${encodeURIComponent(id)}`)).json();
+  if (s.empty) return;
+  Object.assign(state, { id, segments: s.segments ?? [], attachments: s.attachments ?? [],
+                         doc: s.doc ?? null, diagrams: s.diagrams ?? [], images: s.images ?? [] });
+  $("docTitle").value = s.doc?.title ?? "";
   $("attachments").innerHTML = "";
-  for (const [i, a] of state.attachments.entries()) {
+  state.attachments.forEach((a, i) => {
     const c = document.createElement("div"); c.className = "att";
     c.innerHTML = `<div class="top"><b>${esc(a.name)}</b><span class="tag">a${i}</span></div><pre>${esc(a.text.slice(0, 700))}</pre>`;
     $("attachments").appendChild(c);
-  }
-  if (state.segments.length)
+  });
+  if (state.segments.length) {
     renderTranscript({ segments: state.segments, audioDurationMs: state.segments.at(-1).endMs, processingMs: 1 }, 0);
-  else { $("transcript").innerHTML = `<div class="empty">Pas de transcription enregistrée.</div>`; $("tStats").hidden = true; }
+  } else {
+    $("transcript").innerHTML = `<div class="empty">Pas de transcription.</div>`; $("tStats").hidden = true;
+  }
   if (state.doc) renderSheet(); else $("sheet").innerHTML = `<div class="empty">Séance sans notes.</div>`;
   state.dirty = false; $("saveState").textContent = ""; refresh(); show("ses");
 }
 
 $("newBtn").onclick = () => {
-  Object.assign(state, { id: null, title: "", segments: [], attachments: [], doc: null, diagrams: [] });
+  Object.assign(state, { id: null, segments: [], attachments: [], doc: null, diagrams: [], images: [] });
   $("docTitle").value = ""; $("attachments").innerHTML = "";
   $("transcript").innerHTML = `<div class="empty">Rien encore.</div>`; $("tStats").hidden = true;
   $("sheet").innerHTML = `<div class="empty">Enregistre une séance ou dépose un document, puis génère les notes.</div>`;
@@ -356,34 +375,27 @@ $("newBtn").onclick = () => {
 
 // ------------------------------------------------------------ capture
 const BARS = 24;
-const bars = Array.from({ length: BARS }, () => {
-  const b = document.createElement("div"); b.className = "bar"; $("levelWrap").appendChild(b); return b;
-});
+const bars = Array.from({ length: BARS }, () => { const b = document.createElement("div"); b.className = "bar"; $("levelWrap").appendChild(b); return b; });
 $("recBtn").onclick = () => (state.rec ? stopRec() : startRec());
 
 async function startRec() {
   let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true } });
-  } catch { $("status").innerHTML = `<span class="err">micro refusé</span>`; return; }
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true } }); }
+  catch { $("status").innerHTML = `<span class="err">micro refusé</span>`; return; }
   const ctx = new AudioContext(); const an = ctx.createAnalyser(); an.fftSize = 512;
   ctx.createMediaStreamSource(stream).connect(an);
   const data = new Uint8Array(an.frequencyBinCount);
   const draw = () => {
     if (!state.rec) { bars.forEach((b) => (b.style.height = "4px")); return; }
-    an.getByteFrequencyData(data);
-    const step = Math.floor(data.length / BARS);
-    bars.forEach((b, i) => { const v = data[i * step] / 255;
-      b.style.height = `${4 + v * 28}px`; b.style.background = v > 0.05 ? "var(--accent)" : "var(--line)"; });
+    an.getByteFrequencyData(data); const step = Math.floor(data.length / BARS);
+    bars.forEach((b, i) => { const v = data[i * step] / 255; b.style.height = `${4 + v * 28}px`;
+                             b.style.background = v > 0.05 ? "var(--accent)" : "var(--line)"; });
     requestAnimationFrame(draw);
   };
   const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/mp4";
-  state.chunks = [];
-  state.rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
+  state.chunks = []; state.rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
   state.rec.ondataavailable = (e) => e.data.size > 0 && state.chunks.push(e.data);
-  state.rec.onstop = () => { stream.getTracks().forEach((t) => t.stop()); ctx.close();
-                             transcribe(new Blob(state.chunks, { type: mime }), mime); };
+  state.rec.onstop = () => { stream.getTracks().forEach((t) => t.stop()); ctx.close(); transcribe(new Blob(state.chunks, { type: mime }), mime); };
   state.rec.start(1000); state.startedAt = Date.now(); draw();
   $("recBtn").classList.add("recording"); $("recBtn").textContent = "■"; $("status").textContent = "enregistrement…";
   state.timer = setInterval(() => ($("timer").textContent = fmt(Date.now() - state.startedAt)), 250);
@@ -394,16 +406,12 @@ function stopRec() {
 }
 async function transcribe(blob, mime) {
   if (state.blobUrl) URL.revokeObjectURL(state.blobUrl);
-  state.blobUrl = URL.createObjectURL(blob);
-  $("player").src = state.blobUrl; $("player").hidden = false;
+  state.blobUrl = URL.createObjectURL(blob); $("player").src = state.blobUrl; $("player").hidden = false;
   const t0 = performance.now();
   try {
-    const r = await fetch("/transcribe", { method: "POST", body: blob,
-      headers: { "Content-Type": "application/octet-stream", "X-Mime-Type": mime } });
-    const res = await r.json();
-    if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
-    state.segments = res.segments;
-    renderTranscript(res, (performance.now() - t0) / 1000);
+    const r = await fetch("/transcribe", { method: "POST", body: blob, headers: { "Content-Type": "application/octet-stream", "X-Mime-Type": mime } });
+    const res = await r.json(); if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
+    state.segments = res.segments; renderTranscript(res, (performance.now() - t0) / 1000);
     refresh(); markDirty(); $("status").textContent = "prêt";
   } catch (e) { $("status").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
 }
@@ -411,27 +419,23 @@ function renderTranscript(res, wall) {
   const host = $("transcript"); host.innerHTML = "";
   if (!res.segments.length) { host.innerHTML = `<div class="empty">Aucune parole détectée.</div>`; return; }
   for (const seg of res.segments) {
-    const d = document.createElement("div");
-    d.className = "seg" + (seg.avgConfidence < 0.6 ? " low" : "");
+    const d = document.createElement("div"); d.className = "seg" + (seg.avgConfidence < 0.6 ? " low" : "");
     d.dataset.start = seg.startMs; d.dataset.end = seg.endMs;
-    d.innerHTML = `<time title="confiance ${(seg.avgConfidence * 100).toFixed(0)} %">${fmt(seg.startMs)}</time><span>${esc(seg.text)}</span>`;
+    d.innerHTML = `<time>${fmt(seg.startMs)}</time><span>${esc(seg.text)}</span>`;
     d.querySelector("time").onclick = () => seek(seg.startMs);
     host.appendChild(d);
   }
   $("tStats").hidden = false;
-  $("tStats").innerHTML = `<span>durée <b>${fmt(res.audioDurationMs)}</b></span>
-    <span>segments <b>${res.segments.length}</b></span>
-    ${wall ? `<span>transcrit en <b>${wall.toFixed(1)} s</b></span>` : ""}
-    <span>coût <b>0,00 €</b></span>`;
+  $("tStats").innerHTML = `<span>durée <b>${fmt(res.audioDurationMs)}</b></span><span>segments <b>${res.segments.length}</b></span>
+    ${wall ? `<span>en <b>${wall.toFixed(1)} s</b></span>` : ""}<span>coût <b>0,00 €</b></span>`;
 }
 const seek = (ms) => { const p = $("player"); if (!p.src) return; p.currentTime = ms / 1000; p.play(); };
 $("player").addEventListener("timeupdate", () => {
   const ms = $("player").currentTime * 1000;
-  for (const el of document.querySelectorAll(".seg"))
-    el.classList.toggle("playing", ms >= +el.dataset.start && ms < +el.dataset.end);
+  for (const el of document.querySelectorAll(".seg")) el.classList.toggle("playing", ms >= +el.dataset.start && ms < +el.dataset.end);
 });
 
-// ---------------------------------------------------------- documents
+// ------------------------------------------------------------ sources
 const drop = $("drop");
 drop.onclick = () => $("fileInput").click();
 drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
@@ -439,38 +443,50 @@ drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); handleFiles([...e.dataTransfer.files]); };
 $("fileInput").onchange = (e) => handleFiles([...e.target.files]);
 $("pasteBtn").onclick = async () => {
-  const text = prompt("Colle le texte (plan du cours, énoncé, notes déjà prises) :");
-  if (text?.trim()) await addAttachment({ kind: "text", name: "texte collé", text });
+  const t = prompt("Colle le texte :"); if (t?.trim()) await addAttachment({ kind: "text", name: "texte collé", text: t });
 };
 async function handleFiles(files) {
-  for (const file of files) {
-    if (file.type.startsWith("image/")) {
-      const dataUrl = await new Promise((res) => {
-        const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(file); });
-      await addAttachment({ kind: "image", name: file.name, dataUrl }, dataUrl);
-    } else await addAttachment({ kind: "text", name: file.name, text: await file.text() });
+  for (const f of files) {
+    if (f.type.startsWith("image/")) { const url = await shrink(f); await addAttachment({ kind: "image", name: f.name, dataUrl: url }, url); }
+    else await addAttachment({ kind: "text", name: f.name, text: await f.text() });
   }
 }
+
+/** Redimensionne avant stockage : une photo de 4 Mo dans un document JSON relu à
+ *  chaque ouverture, c'est une bibliothèque qui devient lente en une semaine. */
+function shrink(file, max = 1400, quality = 0.82) {
+  return new Promise((res) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        res(c.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => res(fr.result);
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
 async function addAttachment(payload, preview) {
   const card = document.createElement("div"); card.className = "att";
   card.innerHTML = `<div class="top"><b>${esc(payload.name)}</b><span class="tag">lecture…</span></div>`;
   $("attachments").appendChild(card);
   try {
-    const r = await fetch("/attachment", { method: "POST",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    const res = await r.json();
-    if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
+    const r = await fetch("/attachment", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const res = await r.json(); if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
     const i = state.attachments.length;
     state.attachments.push({ name: res.name, text: res.text, kind: res.kind });
-    card.innerHTML = `<div class="top"><b>${esc(res.name)}</b>
-        <span class="tag">a${i} · ${res.kind === "image" ? "photo lue" : "texte"} · ${res.costEuros ?? ""}</span>
-        <button class="sm ghost">✕</button></div>
-      ${preview ? `<img src="${preview}" alt="">` : ""}<pre>${esc(res.text.slice(0, 1200))}</pre>`;
+    card.innerHTML = `<div class="top"><b>${esc(res.name)}</b><span class="tag">a${i} · ${res.kind === "image" ? "photo lue" : "texte"} · ${res.costEuros ?? ""}</span>
+      <button class="sm ghost">✕</button></div>${preview ? `<img src="${preview}" alt="">` : ""}<pre>${esc(res.text.slice(0, 1200))}</pre>`;
     card.querySelector("button").onclick = () => { state.attachments[i] = null; card.remove(); refresh(); };
     refresh(); markDirty();
-  } catch (e) {
-    card.innerHTML = `<div class="top"><b>${esc(payload.name)}</b><span class="err">${esc(e.message)}</span></div>`;
-  }
+  } catch (e) { card.innerHTML = `<div class="top"><b>${esc(payload.name)}</b><span class="err">${esc(e.message)}</span></div>`; }
 }
 const live = () => state.attachments.filter(Boolean);
 
@@ -478,91 +494,111 @@ function refresh() {
   const has = state.segments.length > 0 || live().length > 0;
   $("notesBtn").disabled = !has;
   $("diagBtn").disabled = !state.doc && !has;
-  const hasDoc = !!state.doc;
-  $("mdBtn").disabled = !hasDoc; $("printBtn").disabled = !hasDoc; $("saveBtn").disabled = !hasDoc && !has;
+  $("imgBtn").disabled = !state.doc;
+  $("mdBtn").disabled = !state.doc;
+  $("printBtn").disabled = !state.doc;
+  $("saveBtn").disabled = !state.doc && !has;
 }
 
-// ------------------------------------------------------------- notes
+// -------------------------------------------------------------- notes
 $("notesBtn").onclick = async () => {
-  const btn = $("notesBtn"); btn.disabled = true; btn.textContent = "génération…"; $("notesErr").textContent = "";
+  const b = $("notesBtn"); b.disabled = true; b.textContent = "génération…"; $("notesErr").textContent = "";
   try {
-    const keepEdited = (state.doc?.blocks ?? []).filter((b) => b.edited).map((b) => b.text ?? b.definition ?? "");
+    const keepEdited = (state.doc?.blocks ?? []).filter((x) => x.edited).map((x) => x.text ?? x.definition ?? "");
     const r = await fetch("/notes", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ segments: state.segments, attachments: live(), keepEdited,
-                             enrich: $("enrichChk").checked }) });
-    const res = await r.json();
-    if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
-    const edited = (state.doc?.blocks ?? []).filter((b) => b.edited);
-    res.blocks = [...edited, ...res.blocks];
+                             enrich: $("enrichChk").checked, language: $("langSel").value }) });
+    const res = await r.json(); if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
+    res.blocks = [...(state.doc?.blocks ?? []).filter((x) => x.edited), ...res.blocks];
     state.doc = res;
     if (!$("docTitle").value) $("docTitle").value = res.title;
     renderSheet(); markDirty();
   } catch (e) { $("notesErr").textContent = e.message; }
-  finally { btn.disabled = false; btn.textContent = "Générer les notes"; refresh(); }
+  finally { b.disabled = false; b.textContent = "Générer les notes"; refresh(); }
 };
 
-function anchorHtml(a) {
+/** Les horodatages ne sont plus affichés : ils encombraient la lecture. La
+ *  traçabilité reste entière — le bloc lui-même repositionne l'audio au clic, et
+ *  l'infobulle dit d'où vient le passage. */
+function srcAttrs(a) {
   if (!a) return "";
-  if (a.kind === "attachment")
-    return `<span class="anchor att" title="${esc((a.names || []).join(", "))}">doc</span>`;
-  return `<span class="anchor" data-ms="${a.startMs}" title="${esc((a.names||[]).join(', '))}">${fmt(a.startMs)}</span>`;
+  if (a.kind === "transcript") return ` data-ms="${a.startMs}" title="Écouter le passage — ${fmt(a.startMs)}"`;
+  return ` title="D'après ${esc((a.names || []).join(", "))}"`;
 }
 
 function blockHtml(b, i) {
-  const a = anchorHtml(b.anchor);
-  const attrs = `class="blk${b.edited ? " edited" : ""}" contenteditable="true" data-i="${i}"`;
-  if (b.type === "heading") return b.level >= 3 ? `<h3 ${attrs}>${esc(b.text)}${a}</h3>` : `<h2 ${attrs}>${esc(b.text)}${a}</h2>`;
-  if (b.type === "bullets") return `<ul ${attrs}>${b.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>${a}`;
+  const src = srcAttrs(b.anchor);
+  const ed = `contenteditable="true" data-i="${i}"`;
+  const cls = `blk${b.edited ? " edited" : ""}${b.anchor?.kind === "transcript" ? " srcable" : ""}`;
+  if (b.type === "heading") return `<h3 class="${cls}" ${ed}${src}>${esc(b.text)}</h3>`;
+  if (b.type === "bullets") return `<ul class="${cls}" ${ed}${src}>${b.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
   if (b.type === "definition")
-    return `<div class="def"><p ${attrs}><span class="term">${esc(b.term)}</span> — ${esc(b.definition)}</p>${a}</div>`;
+    return `<div class="def"${src}><span class="term">${esc(b.term)}</span><span class="body ${cls}" ${ed}>${esc(b.definition)}</span></div>`;
   if (b.type === "callout")
-    return `<div class="callout ${esc(b.kind)}"><span class="lbl">${esc(b.kind.replace("-", " "))}</span><span ${attrs}>${esc(b.text)}</span>${a}</div>`;
-  return `<p ${attrs}>${esc(b.text)}${a}</p>`;
+    return `<div class="callout ${esc(b.kind)}"${src}><span class="ico">${ICONS[b.kind] ?? "•"}</span>
+      <span class="lbl">${esc(b.kind.replace("-", " "))}</span><span class="${cls}" ${ed}>${esc(b.text)}</span></div>`;
+  return `<p class="${cls}" ${ed}${src}>${esc(b.text)}</p>`;
 }
 
 function renderSheet() {
   const d = state.doc, host = $("sheet");
   const dur = state.segments.length ? fmt(state.segments.at(-1).endMs) : null;
-  const bits = [dur && `${dur} de cours`, `${d.blocks.length} blocs`,
-                live().length && `${live().length} document(s)`,
+  const meta = [dur && `${dur} de cours`, `${d.blocks.length} blocs`,
+                live().length && `${live().length} source(s)`,
                 new Date().toLocaleDateString("fr-FR", { dateStyle: "long" })].filter(Boolean);
 
+  let n = 0;
+  const body = d.blocks.map((b, i) => {
+    if (b.type === "heading" && (b.level ?? 2) <= 2) {
+      n += 1;
+      return `<div class="sec"><span class="num">${String(n).padStart(2, "0")}</span>
+        <h2 class="blk${b.edited ? " edited" : ""}" contenteditable="true" data-i="${i}"${srcAttrs(b.anchor)}>${esc(b.text)}</h2></div>`;
+    }
+    return blockHtml(b, i);
+  });
+
   const parts = [
-    `<h1 class="doctitle blk" contenteditable="true" data-i="title">${esc(d.title)}</h1>`,
-    `<div class="docmeta">${bits.join(" · ")}</div>`,
+    `<div class="cover"><div class="kicker">Notes de cours${d.language ? " · " + esc(d.language.toUpperCase()) : ""}</div>
+       <h1 class="doctitle blk" contenteditable="true" data-i="title">${esc(d.title)}</h1>
+       <div class="rule"></div><div class="docmeta">${meta.map((m) => `<span>${esc(m)}</span>`).join("")}</div></div>`,
+    `<div class="sheetInner">`,
     `<p class="lede blk" contenteditable="true" data-i="summary">${esc(d.summary)}</p>`,
+    ...body,
+    `<div id="imgHost"></div>`,
+    `<div id="diagHost"></div>`,
   ];
-  d.blocks.forEach((b, i) => parts.push(blockHtml(b, i)));
 
   if (d.enrichments?.length) {
-    parts.push(`<h2 style="margin-top:36px">Compléments</h2>`);
-    parts.push(`<p style="font-family:var(--sans);font-size:12.5px;color:var(--muted);margin-top:-4px">
-      Ces blocs ne viennent pas du cours : ils comblent des prérequis supposés connus. Vérifie-les avant de réviser dessus.</p>`);
-    for (const e of d.enrichments)
-      parts.push(`<div class="enrich"><span class="lbl">hors cours · ${esc(e.title ?? "complément")}</span>
-        ${esc(e.text)}${e.why ? `<div class="why">${esc(e.why)}</div>` : ""}</div>`);
+    parts.push(`<div class="sec"><span class="num">+</span><h2>Compléments</h2></div>`);
+    parts.push(`<p style="font-family:var(--sans);font-size:12.5px;color:var(--muted);margin-top:-2px">
+      Hors cours : ces blocs comblent des prérequis supposés connus. Vérifie-les avant de réviser dessus.</p>`);
+    d.enrichments.forEach((e, i) => parts.push(
+      `<div class="enrich"><span class="lbl">hors cours · ${esc(e.title ?? "complément")}</span>${esc(e.text)}
+       ${e.why ? `<div class="why">${esc(e.why)}</div>` : ""}
+       ${e.mermaid ? `<div class="render" id="enr-${i}" style="margin-top:12px"></div>` : ""}</div>`));
   }
 
   if (d.glossary?.length) {
-    parts.push(`<div class="gloss"><h2 style="margin-top:0">Glossaire</h2><dl>`);
-    for (const g of d.glossary)
-      parts.push(`<dt>${esc(g.term)}${anchorHtml(g.anchor)}</dt><dd>${esc(g.definition)}</dd>`);
+    parts.push(`<div class="gloss"><div class="gtitle">Glossaire</div><dl>`);
+    for (const g of d.glossary) parts.push(`<dt>${esc(g.term)}</dt><dd${srcAttrs(g.anchor)}>${esc(g.definition)}</dd>`);
     parts.push(`</dl></div>`);
   }
-
-  parts.push(`<div id="diagHost"></div>`);
-  if (d.rejectedBlocks > 0)
-    parts.push(`<p class="err noprint">${d.rejectedBlocks} bloc(s) écarté(s) : la source citée ne correspondait pas.</p>`);
+  if (d.rejectedBlocks > 0) parts.push(`<p class="err noprint">${d.rejectedBlocks} bloc(s) écarté(s) : source non concordante.</p>`);
   if (d.fallbackNote) parts.push(`<p class="err noprint">${esc(d.fallbackNote)}</p>`);
-  parts.push(`<div class="stats noprint"><span>modèle <b>${esc(d.model)}</b></span>
-    <span>coût <b>${esc(d.costEuros)}</b></span><span>en <b>${(d.latencyMs / 1000).toFixed(1)} s</b></span></div>`);
+  parts.push(`<div class="stats noprint"><span>modèle <b>${esc(d.model)}</b></span><span>coût <b>${esc(d.costEuros)}</b></span>
+    <span>en <b>${(d.latencyMs / 1000).toFixed(1)} s</b></span></div></div>`);
 
   host.innerHTML = parts.join("");
-  for (const el of host.querySelectorAll(".anchor[data-ms]")) el.onclick = () => seek(+el.dataset.ms);
+  for (const el of host.querySelectorAll("[data-ms]"))
+    el.onclick = (e) => { if (!e.target.isContentEditable) seek(+el.dataset.ms); };
   for (const el of host.querySelectorAll(".blk")) el.addEventListener("input", () => onEdit(el));
-  // Un schéma supprimé laisse un trou dans le tableau : on le saute au rendu
-  // plutôt que de réindexer, sinon les identifiants de carte se décalent.
+  state.images.forEach((im, i) => im && renderImage(im, i));
   state.diagrams.forEach((dg, i) => dg && renderDiagram(dg, i));
+  (d.enrichments ?? []).forEach((e, i) => {
+    if (!e.mermaid) return;
+    const t = document.getElementById(`enr-${i}`); if (!t) return;
+    mermaid.render(`enr-m${i}-${Date.now()}`, e.mermaid).then(({ svg }) => (t.innerHTML = svg)).catch(() => t.remove());
+  });
 }
 
 function onEdit(el) {
@@ -573,96 +609,107 @@ function onEdit(el) {
     const b = d.blocks[+i]; if (!b) return;
     b.edited = true;
     if (b.type === "bullets") b.items = [...el.querySelectorAll("li")].map((li) => li.innerText.trim());
-    else if (b.type === "definition") b.definition = text.replace(/^.*?—\s*/, "");
-    else b.text = text.replace(/\s*\d{2}:\d{2}\s*$/, "");
+    else if (b.type === "definition") b.definition = text;
+    else b.text = text;
     el.classList.add("edited");
   }
   markDirty();
 }
 
-// ---------------------------------------------------------- schémas
+// ------------------------------------------------ images dans les notes
+$("imgBtn").onclick = () => $("imgInput").click();
+$("imgInput").onchange = async (e) => {
+  for (const f of e.target.files) {
+    const caption = prompt(`Légende pour « ${f.name} » (facultatif)`, "") ?? "";
+    state.images.push({ dataUrl: await shrink(f), caption, name: f.name });
+    renderImage(state.images.at(-1), state.images.length - 1);
+  }
+  e.target.value = ""; markDirty();
+};
+
+function renderImage(im, index) {
+  const host = $("imgHost"); if (!host || document.getElementById(`img-${index}`)) return;
+  const fig = document.createElement("figure"); fig.id = `img-${index}`;
+  fig.innerHTML = `<div class="imgwrap"><img src="${im.dataUrl}" alt="${esc(im.caption)}">
+      <button class="sm ghost del noprint" title="Retirer">✕</button></div>
+    <figcaption contenteditable="true">${esc(im.caption || "Légende…")}</figcaption>`;
+  host.appendChild(fig);
+  fig.querySelector("button").onclick = () => { state.images[index] = null; fig.remove(); markDirty(); };
+  fig.querySelector("figcaption").addEventListener("input", (ev) => {
+    state.images[index].caption = ev.target.innerText.trim(); markDirty();
+  });
+}
+
+// ------------------------------------------------------------ schémas
 $("diagBtn").onclick = async () => {
-  const instruction = prompt("Que veux-tu représenter ? (vide = l'IA choisit)", "") ?? "";
-  const btn = $("diagBtn"); btn.disabled = true; btn.textContent = "schéma…";
+  const instruction = prompt("Que représenter ? (vide = l'IA choisit)", "") ?? "";
+  const b = $("diagBtn"); b.disabled = true; b.textContent = "schéma…";
   try {
     const context = state.doc
-      ? [state.doc.summary, ...state.doc.blocks.map((b) => b.text ?? `${b.term} : ${b.definition}`)].join("\n")
+      ? [state.doc.summary, ...state.doc.blocks.map((x) => x.text ?? `${x.term} : ${x.definition}`)].join("\n")
       : state.segments.map((s) => s.text).join(" ");
     const r = await fetch("/diagram", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ context: context.slice(0, 12000), instruction }) });
-    const res = await r.json();
-    if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
+      body: JSON.stringify({ context: context.slice(0, 12000), instruction, language: state.doc?.language ?? "fr" }) });
+    const res = await r.json(); if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
     if (!res.mermaid?.trim()) { $("notesErr").textContent = res.explanation || "Ce passage ne se prête pas à un schéma."; return; }
     state.diagrams.push(res); renderDiagram(res, state.diagrams.length - 1); markDirty();
   } catch (e) { $("notesErr").textContent = e.message; }
-  finally { btn.disabled = false; btn.textContent = "Faire un schéma"; refresh(); }
+  finally { b.disabled = false; b.textContent = "Schéma"; refresh(); }
 };
 
-async function renderDiagram(d, index) {
-  const host = $("diagHost"); if (!host) return;
-  let card = document.getElementById(`diag-${index}`);
-  if (!card) {
-    card = document.createElement("figure"); card.className = "diagram"; card.id = `diag-${index}`;
-    card.style.margin = "22px 0";
-    card.innerHTML = `<div style="display:flex;align-items:baseline;gap:8px">
-        <h4 style="flex:1">${esc(d.title)}</h4><button class="sm ghost noprint" title="Retirer">✕</button></div>
-      <p class="cap">${esc(d.explanation)}</p><div class="render"></div>
-      <details class="noprint"><summary class="cap" style="cursor:pointer">Code Mermaid — modifiable</summary>
-      <textarea spellcheck="false"></textarea><button class="sm" style="margin-top:6px">Re-rendre</button></details>`;
-    host.appendChild(card);
-    card.querySelector("textarea").value = d.mermaid;
-    const [del, rerender] = card.querySelectorAll("button");
-    del.onclick = () => { state.diagrams[index] = null; card.remove(); markDirty(); };
-    rerender.onclick = () => { state.diagrams[index].mermaid = card.querySelector("textarea").value;
-                               drawInto(card, state.diagrams[index], index); markDirty(); };
-  }
-  drawInto(card, d, index);
+function renderDiagram(d, index) {
+  const host = $("diagHost"); if (!host || document.getElementById(`diag-${index}`)) return;
+  const card = document.createElement("figure"); card.className = "diagram"; card.id = `diag-${index}`;
+  card.innerHTML = `<div style="display:flex;align-items:baseline;gap:8px"><h4 style="flex:1">${esc(d.title)}</h4>
+      <button class="sm ghost noprint" title="Retirer">✕</button></div><p class="cap">${esc(d.explanation)}</p>
+    <div class="render"></div><details class="noprint"><summary class="cap" style="cursor:pointer">Code Mermaid</summary>
+    <textarea spellcheck="false"></textarea><button class="sm" style="margin-top:6px">Re-rendre</button></details>`;
+  host.appendChild(card);
+  card.querySelector("textarea").value = d.mermaid;
+  const [del, again] = card.querySelectorAll("button");
+  del.onclick = () => { state.diagrams[index] = null; card.remove(); markDirty(); };
+  again.onclick = () => { state.diagrams[index].mermaid = card.querySelector("textarea").value; draw(card, state.diagrams[index], index); markDirty(); };
+  draw(card, d, index);
 }
-async function drawInto(card, d, index) {
-  const target = card.querySelector(".render");
-  try {
-    const { svg } = await mermaid.render(`m${index}-${Date.now()}`, d.mermaid);
-    target.innerHTML = svg;
-  } catch (e) {
-    target.innerHTML = `<div class="err">Mermaid n'a pas pu rendre ce schéma : ${esc(String(e.message ?? e).split("\n")[0])}</div>`;
+async function draw(card, d, index) {
+  const t = card.querySelector(".render");
+  try { const { svg } = await mermaid.render(`m${index}-${Date.now()}`, d.mermaid); t.innerHTML = svg; }
+  catch (e) {
+    t.innerHTML = `<div class="err">Mermaid n'a pas pu rendre ce schéma : ${esc(String(e.message ?? e).split("\n")[0])}</div>`;
     card.querySelector("details").open = true;
   }
 }
 
-// ------------------------------------------------------------ export
+// ------------------------------------------------------------- export
 $("printBtn").onclick = () => window.print();
-
 $("mdBtn").onclick = () => {
   const d = state.doc, L = [`# ${d.title}`, "", d.summary, ""];
-  const ts = (a) => (a?.kind === "transcript" ? ` ^[${fmt(a.startMs)}]` : a ? " ^[doc]" : "");
   for (const b of d.blocks) {
-    if (b.type === "heading") L.push("", (b.level >= 3 ? "### " : "## ") + b.text + ts(b.anchor), "");
-    else if (b.type === "bullets") { for (const it of b.items) L.push(`- ${it}`); L.push(ts(b.anchor).trim(), ""); }
-    else if (b.type === "definition") L.push(`**${b.term}** — ${b.definition}${ts(b.anchor)}`, "");
-    else if (b.type === "callout") L.push(`> **${b.kind.replace("-", " ").toUpperCase()}** — ${b.text}${ts(b.anchor)}`, "");
-    else L.push(b.text + ts(b.anchor), "");
+    if (b.type === "heading") L.push("", (b.level >= 3 ? "### " : "## ") + b.text, "");
+    else if (b.type === "bullets") { for (const it of b.items) L.push(`- ${it}`); L.push(""); }
+    else if (b.type === "definition") L.push(`**${b.term}** — ${b.definition}`, "");
+    else if (b.type === "callout") L.push(`> **${b.kind.replace("-", " ").toUpperCase()}** — ${b.text}`, "");
+    else L.push(b.text, "");
   }
-  for (const dg of state.diagrams.filter(Boolean))
-    L.push("", `### ${dg.title}`, "", "```mermaid", dg.mermaid, "```", "", `*${dg.explanation}*`, "");
+  for (const im of state.images.filter(Boolean)) L.push("", `![${im.caption || im.name}](${im.dataUrl})`, "");
+  for (const dg of state.diagrams.filter(Boolean)) L.push("", `### ${dg.title}`, "", "```mermaid", dg.mermaid, "```", "", `*${dg.explanation}*`, "");
   if (d.enrichments?.length) {
-    L.push("", "## Compléments", "", "*Hors cours — vérifie avant de réviser dessus.*", "");
-    for (const e of d.enrichments) L.push(`**${e.title ?? "Complément"}** — ${e.text}`, "");
+    L.push("", "## Compléments", "", "*Hors cours — à vérifier.*", "");
+    for (const e of d.enrichments) {
+      L.push(`**${e.title ?? "Complément"}** — ${e.text}`, "");
+      if (e.mermaid) L.push("```mermaid", e.mermaid, "```", "");
+    }
   }
-  if (d.glossary?.length) {
-    L.push("", "## Glossaire", "");
-    for (const g of d.glossary) L.push(`**${g.term}** — ${g.definition}${ts(g.anchor)}`, "");
-  }
-  const blob = new Blob([L.join("\n")], { type: "text/markdown;charset=utf-8" });
+  if (d.glossary?.length) { L.push("", "## Glossaire", ""); for (const g of d.glossary) L.push(`**${g.term}** — ${g.definition}`, ""); }
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = `${slug(d.title)}.md`; a.click();
+  a.href = URL.createObjectURL(new Blob([L.join("\n")], { type: "text/markdown;charset=utf-8" }));
+  a.download = `${slug(d.title)}.md`; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 };
 
-// ------------------------------------------------------- persistance
-function markDirty() { state.dirty = true; $("saveBtn").disabled = false;
-                       $("saveState").textContent = "non enregistré"; }
-$("docTitle").addEventListener("input", () => { state.title = $("docTitle").value; markDirty(); });
-
+// -------------------------------------------------------- persistance
+function markDirty() { state.dirty = true; $("saveBtn").disabled = false; $("saveState").textContent = "non enregistré"; }
+$("docTitle").addEventListener("input", markDirty);
 $("saveBtn").onclick = save;
 async function save() {
   const title = $("docTitle").value.trim() || state.doc?.title || "Séance sans titre";
@@ -671,13 +718,13 @@ async function save() {
   try {
     await fetch("/save", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: state.id, doc: state.doc, diagrams: state.diagrams.filter(Boolean),
-                             attachments: live(), segments: state.segments, savedAt: new Date().toISOString() }) });
+                             images: state.images.filter(Boolean), attachments: live(),
+                             segments: state.segments, savedAt: new Date().toISOString() }) });
     state.dirty = false; $("saveBtn").disabled = true;
     $("saveState").textContent = `enregistré à ${new Date().toLocaleTimeString("fr-FR")}`;
   } catch { $("saveState").textContent = "échec de l'enregistrement"; }
 }
 addEventListener("beforeunload", (e) => { if (state.dirty) { e.preventDefault(); e.returnValue = ""; } });
-
 loadLibrary();
 </script>
 </body>
