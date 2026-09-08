@@ -21,6 +21,8 @@ import re
 import time
 import unicodedata
 import wave
+
+import numpy as np
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,14 +31,30 @@ DEFAULT_AUDIO = BENCH_DIR / "fixtures" / "cours-regularisation.wav"
 DEFAULT_REFERENCE = BENCH_DIR / "fixtures" / "cours-regularisation.txt"
 RESULTS_DIR = BENCH_DIR / "results"
 
+SAMPLE_RATE = 16_000
+
 # Les chunks font 20 à 30 s en production : c'est la granularité qui compte,
 # pas le fichier d'une heure. On mesure les deux.
 CHUNK_SECONDS = 25.0
 
 
-def audio_duration_s(path: Path) -> float:
+def load_wav_mono16k(path: Path) -> np.ndarray:
+    """
+    Charge un WAV PCM 16 bits mono en float32 [-1, 1].
+
+    On décode nous-mêmes plutôt que de laisser mlx_whisper passer par ffmpeg :
+    le binaire n'est pas forcément installé, et pour du WAV il n'apporte rien.
+    En production, le worker reçoit de l'Ogg/Opus et a bien besoin de ffmpeg —
+    fourni là-bas par imageio-ffmpeg, sans Homebrew.
+    """
     with wave.open(str(path)) as w:
-        return w.getnframes() / w.getframerate()
+        if w.getnchannels() != 1 or w.getframerate() != SAMPLE_RATE or w.getsampwidth() != 2:
+            raise SystemExit(
+                f"{path.name}: attendu PCM 16 bits mono {SAMPLE_RATE} Hz, "
+                f"obtenu {w.getsampwidth() * 8} bits / {w.getnchannels()} canaux / {w.getframerate()} Hz"
+            )
+        frames = w.readframes(w.getnframes())
+    return np.frombuffer(frames, dtype="<i2").astype(np.float32) / 32768.0
 
 
 def normalize(text: str) -> list[str]:
@@ -73,15 +91,16 @@ def main() -> None:
 
     import mlx_whisper  # importé tard : l'import seul coûte quelques secondes
 
-    duration = audio_duration_s(args.audio)
+    audio = load_wav_mono16k(args.audio)
+    duration = audio.size / SAMPLE_RATE
     print(f"Audio    : {args.audio.name} — {duration:.1f} s ({duration / 60:.2f} min)")
     print(f"Modèle   : {args.model}")
-    print("Premier passage : le modèle se télécharge puis se charge, c'est normal que ce soit long.\n")
+    print("Premier passage : chargement du modèle en mémoire.\n")
 
     # Passe 1 : téléchargement + chargement + transcription. Donne le coût à froid.
     cold_start = time.perf_counter()
     result = mlx_whisper.transcribe(
-        str(args.audio),
+        audio,
         path_or_hf_repo=args.model,
         word_timestamps=True,
         language=None,  # jamais imposée : les cours mélangent FR et EN
@@ -92,7 +111,7 @@ def main() -> None:
     # Passe 2 : modèle déjà en cache mémoire. C'est le régime du worker.
     warm_start = time.perf_counter()
     result = mlx_whisper.transcribe(
-        str(args.audio),
+        audio,
         path_or_hf_repo=args.model,
         word_timestamps=True,
         language=None,
@@ -112,7 +131,7 @@ def main() -> None:
     monthly_hours = 130.0 * 3
     monthly_compute_h = monthly_hours / rtf
 
-    print(f"À froid           : {cold_elapsed:6.1f} s (téléchargement + chargement inclus)")
+    print(f"À froid           : {cold_elapsed:6.1f} s (chargement du modèle inclus)")
     print(f"À chaud           : {warm_elapsed:6.1f} s")
     print(f"Facteur temps réel: {rtf:6.1f}x")
     print(f"Chunk de {CHUNK_SECONDS:.0f} s      : {per_chunk_s:6.2f} s de calcul")

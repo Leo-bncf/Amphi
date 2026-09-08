@@ -15,7 +15,7 @@ Une PWA offline-first qui enregistre le cours depuis plusieurs téléphones, tra
 | # | Conclusion | Impact |
 |---|---|---|
 | 1 | **L'app tourne sur ton propre matériel** : une VM dédiée sur `infra-pve-2`, qui tourne déjà 24/7 pour schedual. Coût marginal en électricité ≈ 0. Exposition par un **tunnel Cloudflare dédié** — ta ligne est en CGNAT, aucun port-forwarding n'est possible. | Plus de VM louée, plus d'object storage payant, plus d'arbitrage Hetzner/Scaleway. Voir [§11](#11-coûts). |
-| 2 | **La bonne machine pour l'IA, c'est ton MacBook, pas tes serveurs.** Un M4 fait tourner Whisper 10 à 20× plus vite que tes ProLiant de 2012 (Xeon E5, DDR3, pas de GPU), en 20 W au lieu de 78. Et il est déjà dans l'amphi : ton propre scénario, c'est téléphone sur la table + laptop pour éditer. | **Worker ASR local sur ton Mac** (ADR-15), repli payant quand il dort. La règle générale : *héberger* l'app sur une machine déjà allumée coûte quelques watts, donc rien ; *inférer* sature un CPU pendant des heures, donc c'est facturé — par EDF au lieu d'un fournisseur d'API, et à chaque mesure EDF est plus cher. |
+| 2 | **La bonne machine pour l'IA, c'est ton MacBook, pas tes serveurs.** Mesuré : le M4 transcrit à **9,9× le temps réel** (Whisper large-v3-turbo, MLX/Metal), là où les ProLiant de 2012 (Xeon E5, DDR3, sans GPU) sont un ordre de grandeur en dessous pour quatre fois la consommation. Et il est déjà dans l'amphi : ton propre scénario, c'est téléphone sur la table + laptop pour éditer. | **Worker ASR local sur ton Mac** (ADR-15), repli payant quand il dort. La règle générale : *héberger* l'app sur une machine déjà allumée coûte quelques watts, donc rien ; *inférer* sature un CPU pendant des heures, donc c'est facturé — par EDF au lieu d'un fournisseur d'API, et à chaque mesure EDF est plus cher. |
 | 3 | **Le budget final est de ~2,80 €/mois, et la fusion redevient le comportement par défaut.** L'ASR local rend `K` gratuit, et sous Haiku 4.5 les modèles se tiennent à 22 centimes par mois d'écart — le prix cesse d'être le critère. | **Fusion à 3 flux sur toutes les heures**, résumés live, document final par **Mistral Small 4** (ADR-16). Le chiffre que tu avais validé, 7,16 €/mois, devient le **pire cas** — Mac éteint tout le mois — au lieu du cas nominal. Voir [§11](#11-coûts). |
 | 4 | **La sync temporelle décrite au §3.3 du brief (corrélation sur les 60 premières secondes) ne peut pas tenir le critère « < 200 ms après 60 min ».** Les horloges d'échantillonnage audio des téléphones dérivent de 10 à 100 ppm, soit jusqu'à **360 ms/heure** — la dérive est le terme dominant, pas l'offset initial. | Je propose un **ré-ancrage continu** (offset + pente estimés en continu sur toute la séance), pas un calage unique. Voir [§5.1](#51-synchronisation-temporelle). Sans ça, le critère d'acceptation est inatteignable. |
 | 5 | **`MediaRecorder` est un piège sur iOS** (pas d'Opus, chunks non décodables indépendamment) et **Safari suspend la capture quand l'écran se verrouille** — or le scénario nominal est « téléphone posé sur la table ». | Capture via **AudioWorklet → PCM → encodage Opus dans un Worker**, chunks autonomes ; + Wake Lock, détection de trous, test réel de 90 min en semaine 1. Voir [§4](#4--capture-audio). C'est le risque n°1 du projet. |
@@ -146,7 +146,7 @@ Format court : décision, raison, alternative écartée. Les ADR marqués **↯*
 | 11 | **Le transcript canonique est écrit uniquement par le serveur** ; seules les *résolutions humaines de dispute* sont des écritures client. | Évite de mettre la transcription dans un CRDT : elle n'a pas de sémantique d'édition concurrente. Les notes, elles, sont bien un CRDT (Yjs). |
 | 12 | **Traçabilité par ancres**, pas par confiance : chaque bloc de notes généré porte `sourceSpans: [{startMs, endMs}]` vérifiés à la génération. Un bloc sans ancre valide est rejeté, pas affiché. | Critère d'acceptation n°6. Mécanisme décrit en [§6.3](#63-traçabilité--le-mécanisme). |
 | 13 | **Un `SessionEvent` générique dès M1** (type, `at_session_ms`, payload). | Débloque « je n'ai pas compris » (§9 du brief) et les futurs signaux sans migration. Coût aujourd'hui : une table. |
-| **15 ↯** | **Worker ASR local sur le Mac M4 de Leo**, qui tire les jobs de la file quand il est réveillé, via Tailscale (rien à exposer). Repli automatique vers Groq après expiration d'un délai, **en dégradant `K` à 1** et non seulement le fournisseur. | Le Mac est présent en cours (scénario du brief), transcrit à ~10–30× le temps réel et rend `K` gratuit — c'est ce qui permet à la fusion de redevenir le défaut. Dégrader `K` en même temps que le fournisseur borne le pire cas à 7,14 €/mois même si le Mac ne se réveille jamais. Contreparties assumées : ventilation et batterie pendant les cours (cycle utile ~5–10 %), et worker unique — si Leo est absent, tout bascule sur le repli. |
+| **15 ↯** | **Worker ASR local sur le Mac M4 de Leo**, qui tire les jobs de la file quand il est réveillé, via Tailscale (rien à exposer). Repli automatique vers Groq après expiration d'un délai, **en dégradant `K` à 1** et non seulement le fournisseur. | Le Mac est présent en cours (scénario du brief), transcrit à **9,9× le temps réel — mesuré**, voir `bench/results/whisper-m4.json` — et rend `K` gratuit — c'est ce qui permet à la fusion de redevenir le défaut. Dégrader `K` en même temps que le fournisseur borne le pire cas à 7,14 €/mois même si le Mac ne se réveille jamais. Contreparties assumées : ventilation et batterie pendant les cours (cycle utile ~5–10 %), et worker unique — si Leo est absent, tout bascule sur le repli. |
 | **16 ↯** | **LLM = Mistral Small 4** pour le document final (0,15 $ / 0,60 $ par M tokens), **modèle local sur le Mac** pour les résumés live, Claude Sonnet 5 en régénération manuelle. | Sous Haiku 4.5, Mistral Small 4 / DeepSeek V4 / Gemini Flash-Lite se tiennent en **22 centimes par mois** : le prix cesse d'être un critère discriminant, on choisit donc sur l'usage. Mistral est français — les cours sont en français avec du jargon anglais — et remet le traitement en UE gratuitement. DeepSeek est au même prix mais héberge en Chine, profil de risque différent pour des enregistrements d'enseignants. **Le choix reste à valider par le test à l'aveugle de M1**, pas par ce raisonnement. |
 | 17 | **Sauvegardes chiffrées vers un hôte tiers**, pas seulement sur pve-2. | Auto-héberger déplace le risque de la facture vers la panne : une coupure de courant chez toi met l'app hors ligne, un disque mort la supprime. La file offline côté client couvre la première ; seule une sauvegarde hors-site couvre la seconde. Même mécanisme que schedual (dumps chiffrés `age`). |
 
@@ -479,6 +479,40 @@ Coût d'une heure de cours : **0,005 à 0,047 €** selon le mode — le critèr
 
 Le budget n'est plus une contrainte de conception. Les garde-fous restent (`CostLedger` par appel, plafond mensuel dur), mais ils protègent désormais contre un bug — un worker qui boucle — et non contre l'usage normal.
 
+### 11.7 Mesures réelles
+
+Première des trois mesures d'ouverture de M1. Machine : MacBook M4, 10 cœurs, 16 Go, macOS 26.5. Modèle `mlx-community/whisper-large-v3-turbo` en fp16, MLX/Metal. Audio : 5 min 31 de cours de statistiques en français, synthétisé.
+
+| Mesure | Valeur | Attendu | |
+|---|---|---|---|
+| Facteur temps réel | **9,9×** | 10 à 30× | ⚠️ sous la fourchette |
+| Chunk de 25 s | **2,5 s** de calcul | — | ✅ |
+| Chargement du modèle | 3,3 s | — | ✅ amorti, le worker le garde chaud |
+| Coût des horodatages au mot | **nul** — 9,9× contre 9,8× sans | significatif | ✅ bonne surprise |
+
+**Mon estimation de 10 à 30× était optimiste.** Ce qui compte pourtant n'est pas cette fourchette mais le seuil : transcrire trois flux en direct demande **3×**, cinq flux en demandent 5×. À 9,9× il reste un facteur 3,3 de marge sur le profil Fusion. La conclusion de l'ADR-15 tient — avec moins de confort que je ne l'avais écrit.
+
+Le vrai coût est ailleurs : 130 h de cours à 3 flux font **390 h d'audio par mois, soit 39 h de calcul GPU sur le Mac**, environ 1 h 20 par jour. C'est ce qui fait passer le risque R8 — ventilation et batterie — d'une précaution de principe à un point à surveiller.
+
+**Levier en réserve** : un modèle quantifié en 4 bits est typiquement deux fois plus rapide, pour une perte de qualité à mesurer. Pas nécessaire aujourd'hui.
+
+Second résultat, inattendu : les horodatages au mot sont **gratuits**. Je m'attendais à ce qu'ils coûtent cher, puisqu'ils demandent une passe d'alignement supplémentaire. On les active donc partout — le module de consensus et l'ancrage des notes en dépendent tous les deux.
+
+#### Ce que les erreurs disent
+
+WER brut de 6,4 %, mais le chiffre est trompeur : l'essentiel vient de la **notation des nombres**, pas de la reconnaissance. Whisper écrit `R2`, `L2`, `0,94` là où le texte de référence épelle « R deux », « L deux », « zéro virgule quatre-vingt-quatorze ». Ce sont de bonnes transcriptions comptées comme des erreurs.
+
+Deux erreurs réelles, en revanche, valident deux décisions de conception :
+
+| Prononcé | Transcrit | Ce que ça confirme |
+|---|---|---|
+| « trade-off » | « 3 d offre » | Le **biasing par le vocabulaire du cours** (§3.2) n'est pas un raffinement : sans lexique, l'anglicisme au milieu d'une phrase française est massacré. C'est exactement le cas d'usage prévu. |
+| « dépendant » | « **in**dépendant » | Une **inversion de sens**, sur la phrase qui explique pourquoi il faut standardiser. Le type d'erreur qu'aucune relecture rapide ne rattrape et que seuls le vote de consensus et le marquage `disputed` peuvent signaler. |
+
+Sur de la synthèse vocale — signal parfait, sans réverbération d'amphi ni bruit de salle — le modèle produit déjà une inversion de sens. Un argument de plus pour que rien ne soit affiché sans ancre vers l'audio source.
+
+---
+
 ## 12. Risques
 
 | # | Risque | Gravité | Mitigation | Quand on saura |
@@ -490,7 +524,7 @@ Le budget n'est plus une contrainte de conception. Les garde-fous restent (`Cost
 | R5 | **Coupure de courant ou d'internet chez toi pendant un cours** | 🟠 | La file offline côté client absorbe : l'enregistrement continue sur le téléphone, la synchro se fait au retour. Le critère « < 3 min » se dégrade, **aucune donnée n'est perdue**. | Premier incident |
 | R6 | **Perte de disque = perte de tout** — il n'y a plus d'hébergeur pour sauvegarder à ta place | 🟠 | Dumps chiffrés `age` hors-site, **restauration testée** avant le premier vrai cours (ADR-17) | M1 |
 | R7 | **Qualité du modèle bon marché** : Mistral Small 4 tient-il sur du français académique bruité avec ancrage vérifié ? | 🟠 | Test à l'aveugle en M1 sur un vrai cours — local, Mistral, Haiku, Sonnet — Leo tranche. `LLMProvider` rend la bascule gratuite | M1 |
-| R8 | Batterie et ventilation du Mac pendant les cours | 🟡 | Cycle utile ~5–10 %, jobs différés si sur batterie faible, génération du document après le cours | Test semaine 1 |
+| R8 | Batterie et ventilation du Mac pendant les cours | 🟠 | **Mesuré : 39 h de calcul GPU par mois**, ~1 h 20 par jour, cycle utile ~30 % pendant un cours à 3 flux. Garde-fou batterie à 25 % déjà implémenté ; modèle 4 bits en réserve | Partiellement mesuré |
 | R9 | Dérive d'horloge non maîtrisée | 🟡 | ADR-03, test dédié | M3 |
 | R10 | Slop LLM non traçable | 🟡 | Vérification d'ancres avec rejet ([§6.3](#63-traçabilité--le-mécanisme)) — d'autant plus critique avec un petit modèle | M1 |
 | R11 | Batterie / chauffe des téléphones sur 4 h de cours | 🟡 | 16 kHz mono, VAD, écran en veille douce si possible | Test semaine 1 |
@@ -551,7 +585,7 @@ Toutes les questions ouvertes sont refermées. Il me manque **ta validation expl
 Dès que tu donnes le feu vert, M1 commence par les trois mesures qui peuvent invalider des pans entiers du plan, avant toute fonctionnalité :
 
 1. **Capture 90 minutes sur iPhone, écran verrouillé.** Si ça échoue, le produit change de forme — mieux vaut le savoir avant d'écrire le pipeline de consensus.
-2. **Whisper sur ton M4.** Tout le modèle de coût repose sur « 10 à 30× le temps réel ». Si c'est 3×, le worker local reste utile mais le repli devient la norme.
+2. ~~**Whisper sur ton M4.**~~ ✅ **Mesuré le 2026-09-08 : 9,9×** — sous ma fourchette annoncée, au-dessus du seuil qui compte. Voir [§11.7](#117-mesures-réelles).
 3. **Test à l'aveugle du document final** — modèle local, Mistral Small 4, Haiku 4.5, Sonnet 5 — sur un vrai cours à toi, sans étiquettes. Tu choisis. « Le moins cher qui fait le taff » suppose de savoir lequel fait le taff, et ce n'est pas à moi d'en décider sur tes matières.
 
 Puis la restauration d'une sauvegarde, avant le premier enregistrement réel : auto-héberger déplace le risque de la facture vers la panne, et une sauvegarde jamais restaurée n'est pas une sauvegarde.

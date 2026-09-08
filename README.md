@@ -20,7 +20,7 @@ Conçu pour une promo — 10 à 30 personnes, ~30 h de cours par semaine — pou
 M1 s'ouvre sur trois mesures, avant toute fonctionnalité, parce qu'elles peuvent invalider des pans entiers du plan :
 
 1. **Capture 90 min sur iPhone, écran verrouillé** — Safari suspend la capture en arrière-plan, et le scénario nominal est « téléphone posé sur la table ».
-2. **Débit de Whisper sur le Mac** — tout le modèle de coût repose sur 10 à 30× le temps réel. → `bench/`
+2. ✅ **Débit de Whisper sur le Mac** — mesuré à **9,9× le temps réel** sur M4 (il en faut 3 pour tenir trois flux en direct). → `bench/results/whisper-m4.json`
 3. **Test à l'aveugle du document final** — modèle local, Mistral Small 4, Haiku 4.5, Sonnet 5, sur un vrai cours.
 
 ## Prérequis

@@ -1,0 +1,15 @@
+{
+  "ranAt": "2026-09-08T00:24:16.893212+00:00",
+  "model": "mlx-community/whisper-large-v3-turbo",
+  "audioFile": "cours-regularisation.wav",
+  "audioDurationS": 330.73,
+  "coldElapsedS": 36.58,
+  "warmElapsedS": 33.32,
+  "realtimeFactor": 9.92,
+  "secondsPerChunk": 2.519,
+  "segmentCount": 103,
+  "detectedLanguage": "fr",
+  "wer": 0.064,
+  "monthlyComputeHours": 39.3,
+  "verdict": "JUSTE"
+}
