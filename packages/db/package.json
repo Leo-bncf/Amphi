@@ -1,5 +1,5 @@
 {
-  "name": "@amphi/shared",
+  "name": "@amphi/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,14 +14,18 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "zod": "^4.0.0"
+    "@amphi/shared": "workspace:*",
+    "drizzle-orm": "^0.44.0",
+    "postgres": "^3.4.5"
   },
   "devDependencies": {
+    "drizzle-kit": "^0.31.0",
     "typescript": "^5.7.0",
-    "vitest": "^3.0.0",
     "@types/node": "^24.0.0"
   }
 }

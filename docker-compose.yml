@@ -1,0 +1,38 @@
+# Postgres et Redis en local. En production, ces deux services tournent dans la
+# VM Amphi sur infra-pve-2 (ADR-04), avec le même compose et des volumes persistants.
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: amphi
+      POSTGRES_PASSWORD: amphi
+      POSTGRES_DB: amphi
+    ports:
+      # 5433 pour ne pas entrer en conflit avec un Postgres déjà installé.
+      - "5433:5432"
+    volumes:
+      - amphi-pg:/var/lib/postgresql/data
+      - ./packages/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amphi -d amphi"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    # AOF : une file de jobs perdue au redémarrage, ce sont des cours non transcrits.
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6380:6379"
+    volumes:
+      - amphi-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  amphi-pg:
+  amphi-redis:

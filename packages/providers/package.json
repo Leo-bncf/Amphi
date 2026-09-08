@@ -1,5 +1,5 @@
 {
-  "name": "@amphi/shared",
+  "name": "@amphi/providers",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -17,6 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@amphi/shared": "workspace:*",
     "zod": "^4.0.0"
   },
   "devDependencies": {
