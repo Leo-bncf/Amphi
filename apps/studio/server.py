@@ -16,6 +16,9 @@ la transcription fonctionne quand même — c'est la moitié qui n'a besoin de r
 
 from __future__ import annotations
 
+import base64
+import binascii
+import hmac
 import json
 import logging
 import os
@@ -87,6 +90,12 @@ except ImportError as exc:  # pragma: no cover - dépend de la machine
     Transcriber = None  # type: ignore[assignment,misc]
 
 LOG = logging.getLogger("amphi.studio")
+
+# Mot de passe partagé. Absent, le service refuse de s'ouvrir sur le réseau :
+# une URL publique sans verrou donne lecture ET suppression de toutes les notes
+# à qui la connaît, et on ne remarque rien tant que quelqu'un n'a pas effacé.
+AMPHI_PASSWORD = ""
+REALM = "Amphi"
 
 MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
 MISTRAL_MODEL = os.environ.get("AMPHI_LLM_MODEL", "mistral-small-latest")
@@ -935,9 +944,36 @@ class StudioHandler(AsrHandler):
     def _api_key(self) -> str:
         return os.environ.get("MISTRAL_API_KEY", "")
 
+    def _authorized(self) -> bool:
+        """Authentification HTTP Basic. Comparaison à temps constant."""
+        if not AMPHI_PASSWORD:
+            return True
+        header = self.headers.get("Authorization", "")
+        if not header.startswith("Basic "):
+            return False
+        try:
+            decoded = base64.b64decode(header[6:]).decode("utf-8", "replace")
+        except (ValueError, binascii.Error):
+            return False
+        _, _, given = decoded.partition(":")
+        return hmac.compare_digest(given, AMPHI_PASSWORD)
+
+    def _demand_auth(self) -> None:
+        body = b'{"error":"authentification requise"}'
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", f'Basic realm="{REALM}", charset="UTF-8"')
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     # ------------------------------------------------------------------ GET
 
     def do_GET(self) -> None:  # noqa: N802
+        # /health reste ouvert : c'est ce que la sonde du tunnel interroge.
+        if self.path != "/health" and not self._authorized():
+            self._demand_auth()
+            return
         if self.path in ("/", "/index.html"):
             self._send_file(STUDIO_DIR / "ui" / "index.html", "text/html; charset=utf-8")
             return
@@ -988,6 +1024,9 @@ class StudioHandler(AsrHandler):
     # ----------------------------------------------------------------- POST
 
     def do_POST(self) -> None:  # noqa: N802
+        if not self._authorized():
+            self._demand_auth()
+            return
         routes = {
             "/notes": self.handle_notes,
             "/attachment": self.handle_attachment,
@@ -1302,6 +1341,18 @@ def main() -> None:
     # le réseau, c'est offrir la lecture et la suppression de toutes les notes à
     # quiconque partage le wifi. Réservé au partage ponctuel entre camarades.
     host = os.environ.get("AMPHI_HOST", "127.0.0.1")
+
+    global AMPHI_PASSWORD
+    AMPHI_PASSWORD = os.environ.get("AMPHI_PASSWORD", "")
+    exposed = host not in ("127.0.0.1", "localhost")
+    if exposed and not AMPHI_PASSWORD:
+        raise SystemExit(
+            "Refus de démarrer : AMPHI_HOST est ouvert sur le réseau mais "
+            "AMPHI_PASSWORD est vide.\n"
+            "Sans mot de passe, quiconque atteint l'adresse peut lire et "
+            "supprimer toutes les notes.\n"
+            "  AMPHI_PASSWORD='...' AMPHI_HOST=0.0.0.0 python3 apps/studio/server.py"
+        )
     model = os.environ.get("AMPHI_ASR_MODEL", "mlx-community/whisper-large-v3-turbo")
 
     if ASR_AVAILABLE:
@@ -1318,6 +1369,7 @@ def main() -> None:
 
     server = ThreadingHTTPServer((host, port), StudioHandler)
     LOG.info("Amphi Studio prêt → http://127.0.0.1:%d", port)
+    LOG.info("Mot de passe : %s", "activé" if AMPHI_PASSWORD else "aucun (accès local uniquement)")
     if host not in ("127.0.0.1", "localhost"):
         import socket
 
