@@ -508,6 +508,42 @@ Le vrai coût est ailleurs : 130 h de cours à 3 flux font **390 h d'audio par m
 
 Second résultat, inattendu : les horodatages au mot sont **gratuits**. Je m'attendais à ce qu'ils coûtent cher, puisqu'ils demandent une passe d'alignement supplémentaire. On les active donc partout — le module de consensus et l'ancrage des notes en dépendent tous les deux.
 
+#### Génération des notes — mesuré de bout en bout
+
+Même séance, chaîne complète : transcription MLX locale → Mistral Small 4 → notes ancrées.
+
+| Mesure | Valeur |
+|---|---|
+| Tokens | 2 237 en entrée, **3 292 en sortie** |
+| Coût réel | **0,0021 €** pour 5 min 31 |
+| Latence | 16,6 s |
+| Blocs produits | 28, dont **0 écarté** par la vérification d'ancrage |
+| Glossaire | 11 entrées |
+
+**Ce que ça corrige dans mon estimation :** j'avais supposé 18 000 tokens en entrée et 5 000 en sortie pour une heure de cours. La mesure dit que **la sortie domine le coût** — sur un cours dense, les notes structurées sont plus longues que le passage de transcription qui les produit. Extrapolé à une heure : ~24 000 tokens en entrée et 8 000 à 13 000 en sortie, soit **≈ 0,009 € par cours** au lieu des 0,0052 € annoncés, et **~1,15 €/mois** au lieu de 0,68 €.
+
+Le budget mensuel passe donc de 2,77 € à **~3,25 €**. L'écart est réel mais ne change aucune décision : on reste à un sixième de l'enveloppe.
+
+*Réserve : l'extrapolation part d'un échantillon de 5 min 31. La sortie ne croît pas linéairement avec la durée — des notes d'une heure ne font pas onze fois celles de cinq minutes. Le `CostLedger` donnera le vrai chiffre au premier cours complet.*
+
+#### Vérification d'ancrage — testée pour de vrai
+
+Zéro bloc écarté sur la première génération, ce qui pose une question : le garde-fou fonctionne-t-il, ou laisse-t-il tout passer ? Testé avec des cas adverses (`apps/studio/test_anchors.py`, 7 cas) :
+
+| Cas | Résultat |
+|---|---|
+| Reformulation fidèle du segment cité | gardé ✅ |
+| Plusieurs segments corrects, bornes fusionnées | gardé ✅ |
+| Titre court sans mot plein en commun | gardé ✅ *(exemption assumée)* |
+| **Hallucination sur une ancre valide** — contenu absent du cours | **écarté** ✅ |
+| Ancre inventée, hors bornes | écarté ✅ |
+| Aucune ancre | écarté ✅ |
+| Identifiant malformé | écarté ✅ |
+
+Le cas qui compte est le quatrième : un bloc qui cite un vrai segment mais raconte autre chose est rejeté, parce que la vérification ne se contente pas de contrôler que l'identifiant existe — elle exige un recouvrement lexical entre l'affirmation et le passage cité. C'est ce qui empêche « traçable » de ne vouloir dire que « le modèle a écrit un numéro ».
+
+Les zéro rejets de la première génération signifient donc que Mistral Small a réellement cité juste, pas que le contrôle dort.
+
 #### Ce que les erreurs disent
 
 WER brut de 6,4 %, mais le chiffre est trompeur : l'essentiel vient de la **notation des nombres**, pas de la reconnaissance. Whisper écrit `R2`, `L2`, `0,94` là où le texte de référence épelle « R deux », « L deux », « zéro virgule quatre-vingt-quatorze ». Ce sont de bonnes transcriptions comptées comme des erreurs.
