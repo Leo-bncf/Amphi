@@ -32,13 +32,59 @@ from typing import Any
 STUDIO_DIR = Path(__file__).parent
 sys.path.insert(0, str(STUDIO_DIR.parent / "mac-worker"))
 
-from asr_server import (  # noqa: E402
-    Handler as AsrHandler,
-    Transcriber,
-    decode_to_pcm,
-    suffix_for,
-    to_asr_result,
-)
+# Le moteur de transcription tire numpy, MLX et ffmpeg. Sur la machine qui
+# héberge l'app pour la promo — un Tinker Board, un Pi — rien de tout ça n'est
+# installable ni utile : elle sert des pages et appelle des API, la
+# transcription se fait ailleurs. L'import est donc facultatif.
+try:
+    from asr_server import (  # noqa: E402
+        Handler as AsrHandler,
+        Transcriber,
+        decode_to_pcm,  # noqa: F401  (utilisé par AsrHandler)
+        suffix_for,  # noqa: F401
+        to_asr_result,  # noqa: F401
+    )
+
+    ASR_AVAILABLE = True
+except ImportError as exc:  # pragma: no cover - dépend de la machine
+    ASR_AVAILABLE = False
+    ASR_IMPORT_ERROR = str(exc)
+
+    from http.server import BaseHTTPRequestHandler
+
+    class AsrHandler(BaseHTTPRequestHandler):  # type: ignore[no-redef]
+        """Serveur sans moteur local : tout marche sauf /transcribe."""
+
+        transcriber = None
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, fmt: str, *args: Any) -> None:
+            LOG.debug(fmt, *args)
+
+        def _send(self, status: int, payload: dict[str, Any]) -> None:
+            blob = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(blob)))
+            self.end_headers()
+            self.wfile.write(blob)
+
+        def do_GET(self) -> None:  # noqa: N802
+            if self.path == "/health":
+                self._send(200, {"ok": True, "available": False, "warm": False,
+                                 "model": "aucun moteur local", "batteryPercent": None,
+                                 "reason": ASR_IMPORT_ERROR})
+                return
+            self._send(404, {"error": "not found"})
+
+        def do_POST(self) -> None:  # noqa: N802
+            self._send(
+                503,
+                {"error": "Pas de moteur de transcription sur cette machine. "
+                          "Enregistre depuis un poste équipé, ou configure le repli payant."},
+            )
+
+    Transcriber = None  # type: ignore[assignment,misc]
 
 LOG = logging.getLogger("amphi.studio")
 
@@ -1247,9 +1293,14 @@ def main() -> None:
     host = os.environ.get("AMPHI_HOST", "127.0.0.1")
     model = os.environ.get("AMPHI_ASR_MODEL", "mlx-community/whisper-large-v3-turbo")
 
-    StudioHandler.transcriber = Transcriber(model)
-    LOG.info("chargement du modèle %s", model)
-    StudioHandler.transcriber.warm_up()
+    if ASR_AVAILABLE:
+        StudioHandler.transcriber = Transcriber(model)
+        LOG.info("chargement du modèle %s", model)
+        StudioHandler.transcriber.warm_up()
+    else:
+        LOG.warning("Pas de moteur de transcription ici (%s).", ASR_IMPORT_ERROR)
+        LOG.warning("Mode hébergement : notes, bibliothèque et recherche fonctionnent ; "
+                    "l'enregistrement doit se faire depuis un poste équipé.")
 
     if os.environ.get("MISTRAL_API_KEY", "") == "":
         LOG.warning("MISTRAL_API_KEY absente — la transcription marchera, pas la génération de notes")
