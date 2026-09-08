@@ -385,7 +385,7 @@ def verify_anchor(
     transcription porte un horodatage cliquable, une pièce jointe n'en a pas.
     Le bloc doit être rattaché à l'une ou à l'autre — jamais à rien.
     """
-    attachments = attachments or []
+    attachments = [a for a in (attachments or []) if isinstance(a, dict)]
 
     # Piste pièce jointe : une photo de tableau n'a pas d'horodatage, mais elle
     # reste une source vérifiable.
@@ -1128,7 +1128,13 @@ class StudioHandler(AsrHandler):
             engine = LOCAL_LLM_MODEL.split("/")[-1] + " (local)"
 
         kept, rejected, enrichments = [], 0, []
-        for block in doc.get("blocks", []):
+        for block in doc.get("blocks") or []:
+            # Le modèle glisse parfois une chaîne dans la liste de blocs : sans
+            # ce garde-fou, tout l'appel échoue sur un AttributeError et on
+            # perd des notes déjà générées.
+            if not isinstance(block, dict):
+                rejected += 1
+                continue
             # Un bloc d'enrichissement assume de ne pas venir du cours : il n'a pas
             # d'ancre, et l'interface le présente à part. La garantie de traçabilité
             # devient « tout est soit ancré au cours, soit signalé comme extérieur ».
@@ -1156,7 +1162,7 @@ class StudioHandler(AsrHandler):
         # On accepte aussi la forme en ligne, au cas où le modèle en glisse.
         if enrich:
             for extra in doc.get("enrichments") or doc.get("enrichment") or []:
-                if isinstance(extra, dict) and (extra.get("text") or "").strip():
+                if isinstance(extra, dict) and str(extra.get("text") or "").strip():
                     enrichments.append(extra)
             if api_key != "":
                 extra_blocks, extra_usage = generate_enrichments(api_key, "\n\n".join(parts), lang_rule)
@@ -1171,7 +1177,10 @@ class StudioHandler(AsrHandler):
         kept = drop_hollow_headings(kept)
 
         glossary = []
-        for entry in doc.get("glossary", []):
+        for entry in doc.get("glossary") or []:
+            # Un glossaire mal formé ne doit pas faire perdre les notes.
+            if not isinstance(entry, dict) or not str(entry.get("term", "")).strip():
+                continue
             anchor = verify_anchor(entry, segments, attachments)
             if anchor is not None:
                 entry["anchor"] = anchor

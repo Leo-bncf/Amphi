@@ -153,6 +153,45 @@ label.toggle { display: inline-flex; align-items: center; gap: var(--s-2xs); fon
 .doc .mv { position: absolute; top: var(--s-xs); right: 30px; opacity: 0; }
 .doc:hover .mv { opacity: 1; }
 
+/* Explorateur : arborescence figée à gauche, contenu à droite. C'est la forme
+   qu'on reconnaît sans l'apprendre — et le glisser-déposer sur un dossier
+   range une séance sans ouvrir le moindre formulaire. */
+.explorer { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: var(--s-lg);
+            align-items: start; }
+@media (max-width: 860px) { .explorer { grid-template-columns: 1fr; } .tree { display: none; } }
+.tree { position: sticky; top: 62px; border-right: 1px solid var(--hair); padding-right: var(--s-md);
+        font-size: var(--t-sm); display: grid; gap: 1px; }
+.tnode { display: flex; align-items: center; gap: var(--s-2xs); padding: 5px 7px; cursor: pointer;
+         color: var(--muted); border: 1px solid transparent; }
+.tnode:hover { background: var(--paper-2); color: var(--ink); }
+.tnode.on { background: var(--accent-w); color: var(--ink); font-weight: 600; }
+.tnode.drop { border-color: var(--accent); border-style: dashed; background: var(--accent-w); }
+.tnode .tw { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tnode .tc { font-family: var(--font-data); font-size: var(--t-xs); color: var(--neutral); }
+.tnode.child { padding-left: var(--s-lg); }
+.tnode .cx { width: 11px; font-family: var(--font-data); font-size: 9px; color: var(--neutral); }
+
+/* Lignes plutôt que fiches : on scanne une liste, on ne contemple pas des cartes. */
+.rows { display: grid; }
+.rw { display: grid; grid-template-columns: 1fr 150px 92px 74px 54px; gap: var(--s-sm);
+      align-items: center; padding: 9px 8px; border-bottom: 1px solid var(--hair);
+      cursor: pointer; }
+.rw:hover { background: var(--paper-2); }
+.rw:first-child { border-top: 1px solid var(--hair); }
+.rw .nm { font-family: var(--font-body); font-size: 1.02rem; color: var(--ink); line-height: 1.25;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw .sub, .rw .dt, .rw .bl { font-family: var(--font-data); font-size: var(--t-xs); color: var(--neutral); }
+.rw .bl { text-align: right; }
+.rw .act { display: flex; gap: 2px; justify-content: flex-end; opacity: 0; }
+.rw:hover .act { opacity: 1; }
+.rw.drag { opacity: .4; }
+@media (max-width: 760px) { .rw { grid-template-columns: 1fr 54px; }
+                            .rw .sub, .rw .dt, .rw .bl { display: none; } }
+.rhead { display: grid; grid-template-columns: 1fr 150px 92px 74px 54px; gap: var(--s-sm);
+         padding: 0 8px 5px; font-family: var(--font-data); font-size: var(--t-xs);
+         letter-spacing: .1em; text-transform: uppercase; color: var(--neutral); }
+@media (max-width: 760px) { .rhead { display: none; } }
+
 #recentWrap { margin-bottom: var(--s-lg); }
 .rlbl { font-family: var(--font-data); font-size: var(--t-xs); letter-spacing: .16em;
         text-transform: uppercase; color: var(--neutral); margin-bottom: var(--s-xs); }
@@ -197,6 +236,18 @@ label.toggle { display: inline-flex; align-items: center; gap: var(--s-2xs); fon
 #status { color: var(--neutral); font-size: var(--t-sm); min-height: 1.4em; }
 #levelWrap { flex: 1; min-width: 110px; height: 30px; display: flex; align-items: flex-end; gap: 2px; }
 .bar { flex: 1; background: var(--rule); height: 3px; transition: height .07s linear; }
+
+/* Parties d'enregistrement : une ligne par tranche de cinq minutes, avec son
+   état. On voit la transcription avancer pendant le cours au lieu d'attendre
+   l'arrêt sans rien savoir de ce qui se passe. */
+#parts { margin-top: var(--s-sm); display: grid; }
+.part { display: flex; gap: var(--s-sm); align-items: center; padding: 4px 0;
+        border-top: 1px solid var(--hair); font-size: var(--t-xs); font-family: var(--font-data); }
+.part.ko { color: var(--accent); }
+.part .pi { color: var(--accent); }
+.part .pl { border: 0; background: none; padding: 0; color: var(--ink); font-family: inherit;
+            font-size: inherit; text-decoration: underline dotted; }
+.part .ps { color: var(--neutral); flex: 1; }
 audio { width: 100%; margin-top: var(--s-sm); }
 
 .scroll { max-height: 360px; overflow-y: auto; }
@@ -393,11 +444,16 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
       <button class="primary" id="newBtn">Nouvelle séance</button>
       <input id="q" type="search" placeholder="Chercher dans les notes, le glossaire, la transcription…" autocomplete="off" />
     </div>
-    <div class="crumb" id="crumb"></div>
-    <div id="recentWrap" class="hidden">
-      <div class="rlbl">Récentes</div><div id="recent" class="recent"></div>
+    <div class="explorer">
+      <nav class="tree" id="tree"></nav>
+      <div class="pane">
+        <div class="crumb" id="crumb"></div>
+        <div id="recentWrap" class="hidden">
+          <div class="rlbl">Récentes</div><div id="recent" class="recent"></div>
+        </div>
+        <div id="lib"></div>
+      </div>
     </div>
-    <div id="lib" class="lib"></div>
   </section>
 
   <section id="viewSes" class="hidden">
@@ -413,6 +469,7 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
           <input id="docChapter" placeholder="Chapitre" style="min-width:130px" />
           <input id="docTitle" placeholder="Nom de la séance" style="min-width:190px" />
         </div>
+        <div id="parts"></div>
         <audio id="player" controls hidden></audio>
     </div>
 
@@ -469,8 +526,10 @@ const $ = (id) => document.getElementById(id);
 mermaid.initialize({ startOnLoad: false, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "neutral",
                      securityLevel: "strict" });
 
-const state = { id: null, rec: null, chunks: [], startedAt: 0, timer: null,
-                segments: [], attachments: [], doc: null, diagrams: [], images: [], blobUrl: null, dirty: false };
+const state = { id: null, rec: null, recording: false, stream: null, audioCtx: null,
+                startedAt: 0, partBase: 0, partTimer: null, timer: null, queue: null,
+                parts: [], segments: [], attachments: [], doc: null, diagrams: [], images: [],
+                dirty: false };
 
 const fmt = (ms) => { const s = Math.floor(ms / 1000);
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
@@ -521,81 +580,51 @@ const bucket = (d) => (d.course || "").trim() || "Sans matière";
 const chapterOf = (d) => (d.chapter || "").trim() || "Sans chapitre";
 
 function renderLibrary() {
+  renderTree();
   if (lib.query.trim()) return renderSearch();
   const host = $("lib"), crumb = $("crumb");
-  host.className = "lib";
 
   const inScope = lib.docs.filter((d) =>
     (lib.course === null || bucket(d) === lib.course) &&
     (lib.chapter === null || chapterOf(d) === lib.chapter));
 
-  crumb.innerHTML = lib.course === null ? "" :
-    `<button data-lvl="root">Toutes les matières</button><span class="sep">/</span>` +
-    (lib.chapter === null
-      ? `<span class="now">${esc(lib.course)}</span>`
-      : `<button data-lvl="course">${esc(lib.course)}</button><span class="sep">/</span><span class="now">${esc(lib.chapter)}</span>`);
+  crumb.innerHTML = lib.course === null
+    ? `<span class="now">Toutes les séances</span><span class="sep">·</span><span>${lib.docs.length}</span>`
+    : `<button data-lvl="root">Toutes les séances</button><span class="sep">/</span>` +
+      (lib.chapter === null
+        ? `<span class="now">${esc(lib.course)}</span>`
+        : `<button data-lvl="course">${esc(lib.course)}</button><span class="sep">/</span><span class="now">${esc(lib.chapter)}</span>`);
   for (const b of crumb.querySelectorAll("button"))
     b.onclick = () => { if (b.dataset.lvl === "root") { lib.course = null; lib.chapter = null; }
                         else lib.chapter = null; renderLibrary(); };
 
+  $("recentWrap").classList.add("hidden");
   host.innerHTML = "";
   if (!lib.docs.length) { host.innerHTML = `<div class="empty">Aucune séance enregistrée.</div>`; return; }
+  if (!inScope.length) { host.innerHTML = `<div class="empty">Ce dossier est vide.</div>`; return; }
 
-  // Niveau courant : on montre les dossiers du niveau suivant, puis les séances
-  // qui n'y sont pas rangées.
-  const key = lib.course === null ? bucket : chapterOf;
-  const groups = new Map();
-  if (lib.chapter === null) {
-    for (const d of inScope) {
-      const k = key(d);
-      const orphan = lib.course === null ? !(d.course || "").trim() : !(d.chapter || "").trim();
-      if (orphan) continue;
-      groups.set(k, (groups.get(k) ?? []).concat(d));
-    }
-  }
-  for (const [name, items] of [...groups].sort((a, b) => a[0].localeCompare(b[0], "fr"))) {
-    const el = document.createElement("article");
-    el.className = "doc folder";
-    el.innerHTML = `<div class="kind">${lib.course === null ? "Matière" : "Chapitre"}</div>
-      <h3>${esc(name)}</h3><div class="count">${items.length} séance${items.length > 1 ? "s" : ""}</div>`;
-    el.onclick = () => { if (lib.course === null) lib.course = name; else lib.chapter = name; renderLibrary(); };
-    host.appendChild(el);
-  }
+  const head = document.createElement("div"); head.className = "rhead";
+  head.innerHTML = `<span>Séance</span><span>Emplacement</span><span>Modifiée</span><span style="text-align:right">Blocs</span><span></span>`;
+  host.appendChild(head);
 
-  const loose = inScope.filter((d) =>
-    lib.chapter !== null || (lib.course === null ? !(d.course || "").trim() : !(d.chapter || "").trim()));
-  loose.forEach((d, n) => host.appendChild(docCard(d, n + 1)));
-
-  if (!groups.size && !loose.length) host.innerHTML = `<div class="empty">Ce dossier est vide.</div>`;
-
-  // À la racine, on liste aussi les séances récentes quel que soit leur dossier.
-  // Sans ça, ranger une séance la fait disparaître de la page d'accueil — et on
-  // croit l'avoir perdue.
-  $("recent").innerHTML = "";
-  const showRecent = lib.course === null && groups.size > 0;
-  $("recentWrap").classList.toggle("hidden", !showRecent);
-  if (showRecent) {
-    for (const d of lib.docs.slice(0, 6)) {
-      const el = document.createElement("button");
-      el.className = "chip";
-      const place = [d.course, d.chapter].filter(Boolean).join(" · ");
-      el.innerHTML = `<span>${esc(d.title)}</span>${place ? `<span class="in">${esc(place)}</span>` : ""}`;
-      el.onclick = () => openDoc(d.id);
-      $("recent").appendChild(el);
-    }
-  }
+  const rows = document.createElement("div"); rows.className = "rows";
+  for (const d of inScope) rows.appendChild(docRow(d));
+  host.appendChild(rows);
 }
 
-function docCard(d, n) {
-  const el = document.createElement("article"); el.className = "doc";
-  const when = d.savedAt ? new Date(d.savedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "";
-  const place = [d.course, d.chapter].filter(Boolean).join(" · ");
-  el.innerHTML = `<button class="sm ghost del" title="Supprimer">✕</button>
-    <button class="sm ghost mv" title="Ranger dans une matière">⇄</button>
-    <div class="idx">${String(n).padStart(2, "0")}${place ? " · " + esc(place) : ""}</div>
-    <h3>${esc(d.title)}</h3><div class="meta"><span>${when}</span><span>${d.blocks} blocs</span>
-    ${d.diagrams ? `<span>${d.diagrams} schéma</span>` : ""}${d.attachments ? `<span>${d.attachments} source</span>` : ""}</div>`;
+function docRow(d) {
+  const el = document.createElement("div");
+  el.className = "rw"; el.draggable = true;
+  const when = d.savedAt ? new Date(d.savedAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) : "—";
+  const place = [d.course, d.chapter].filter(Boolean).join(" / ") || "non classée";
+  el.innerHTML = `<span class="nm">${esc(d.title)}</span><span class="sub">${esc(place)}</span>
+    <span class="dt">${when}</span><span class="bl">${d.blocks}</span>
+    <span class="act"><button class="sm ghost mv" title="Ranger">⇄</button>
+    <button class="sm ghost del" title="Supprimer">✕</button></span>`;
   el.onclick = () => openDoc(d.id);
+  el.ondragstart = (e) => { lib.dragging = d; el.classList.add("drag");
+                            e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", d.id); };
+  el.ondragend = () => { el.classList.remove("drag"); lib.dragging = null; };
   el.querySelector(".mv").onclick = (e) => { e.stopPropagation(); openMove(d); };
   el.querySelector(".del").onclick = async (e) => {
     e.stopPropagation();
@@ -606,37 +635,59 @@ function docCard(d, n) {
   return el;
 }
 
-/**
- * Rangement d'une séance depuis la bibliothèque, sans l'ouvrir.
- *
- * Les listes déroulantes proposent les matières et chapitres déjà utilisés :
- * c'est ce qui évite de se retrouver avec « Maths », « maths » et
- * « Mathématiques » comme trois dossiers distincts.
- */
-function openMove(d) {
-  const courses = [...new Set(lib.docs.map((x) => (x.course || "").trim()).filter(Boolean))].sort();
-  const chapters = [...new Set(lib.docs.map((x) => (x.chapter || "").trim()).filter(Boolean))].sort();
-  const back = document.createElement("div"); back.className = "modal";
-  back.innerHTML = `<div class="sheetlet">
-      <div class="mt">Ranger la séance</div>
-      <div class="mn">${esc(d.title)}</div>
-      <label>Matière<input id="mvC" list="mvCl" value="${esc(d.course || "")}" placeholder="Business, Mathématiques…"></label>
-      <datalist id="mvCl">${courses.map((c) => `<option value="${esc(c)}">`).join("")}</datalist>
-      <label>Chapitre<input id="mvH" list="mvHl" value="${esc(d.chapter || "")}" placeholder="Chapitre 1, Semaine 3…"></label>
-      <datalist id="mvHl">${chapters.map((c) => `<option value="${esc(c)}">`).join("")}</datalist>
-      <div class="ma"><button id="mvX">Annuler</button><button id="mvOk" class="primary">Ranger</button></div>
-    </div>`;
-  document.body.appendChild(back);
-  const close = () => back.remove();
-  back.onclick = (e) => { if (e.target === back) close(); };
-  back.querySelector("#mvX").onclick = close;
-  addEventListener("keydown", function esc2(e) { if (e.key === "Escape") { close(); removeEventListener("keydown", esc2); } });
-  const input = back.querySelector("#mvC"); input.focus(); input.select();
-  back.querySelector("#mvOk").onclick = async () => {
-    await fetch("/move", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: d.id, course: back.querySelector("#mvC").value, chapter: back.querySelector("#mvH").value }) });
-    close(); loadLibrary();
-  };
+/** Arborescence matière → chapitre, avec les dossiers comme cibles de dépôt. */
+function renderTree() {
+  const host = $("tree");
+  const byCourse = new Map();
+  for (const d of lib.docs) {
+    const c = bucket(d);
+    if (!byCourse.has(c)) byCourse.set(c, new Map());
+    const chapters = byCourse.get(c);
+    const ch = chapterOf(d);
+    chapters.set(ch, (chapters.get(ch) ?? 0) + 1);
+  }
+
+  host.innerHTML = "";
+  host.appendChild(node("Toutes les séances", lib.docs.length,
+                        lib.course === null && !lib.query, false,
+                        () => { lib.course = null; lib.chapter = null; lib.query = ""; $("q").value = ""; renderLibrary(); },
+                        null, null));
+
+  for (const [course, chapters] of [...byCourse].sort((a, b) => a[0].localeCompare(b[0], "fr"))) {
+    const total = [...chapters.values()].reduce((a, b) => a + b, 0);
+    const open = lib.course === course;
+    host.appendChild(node(course, total, open && lib.chapter === null, false,
+      () => { lib.course = course; lib.chapter = null; renderLibrary(); },
+      course === "Sans matière" ? "" : course, null, open ? "▾" : "▸"));
+    if (!open) continue;
+    for (const [chapter, n] of [...chapters].sort((a, b) => a[0].localeCompare(b[0], "fr"))) {
+      host.appendChild(node(chapter, n, lib.chapter === chapter, true,
+        () => { lib.chapter = chapter; renderLibrary(); },
+        course === "Sans matière" ? "" : course,
+        chapter === "Sans chapitre" ? "" : chapter));
+    }
+  }
+
+  function node(label, count, active, child, onClick, dropCourse, dropChapter, caret) {
+    const el = document.createElement("div");
+    el.className = `tnode${active ? " on" : ""}${child ? " child" : ""}`;
+    el.innerHTML = `<span class="cx">${caret ?? ""}</span><span class="tw">${esc(label)}</span><span class="tc">${count}</span>`;
+    el.onclick = onClick;
+    if (dropCourse === null) return el;
+    // Déposer une séance sur un dossier la range : c'est le geste attendu,
+    // et il évite d'ouvrir un formulaire pour deux champs.
+    el.ondragover = (e) => { e.preventDefault(); el.classList.add("drop"); };
+    el.ondragleave = () => el.classList.remove("drop");
+    el.ondrop = async (e) => {
+      e.preventDefault(); el.classList.remove("drop");
+      const d = lib.dragging; if (!d) return;
+      await fetch("/move", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: d.id, course: dropCourse,
+                               chapter: dropChapter === null ? (d.chapter || "") : dropChapter }) });
+      loadLibrary();
+    };
+    return el;
+  }
 }
 
 let searchTimer = null;
@@ -675,7 +726,12 @@ async function openDoc(id) {
   const s = await (await fetch(`/load?id=${encodeURIComponent(id)}`)).json();
   if (s.empty) return;
   Object.assign(state, { id, segments: s.segments ?? [], attachments: s.attachments ?? [],
-                         doc: s.doc ?? null, diagrams: s.diagrams ?? [], images: s.images ?? [] });
+                         doc: s.doc ?? null, diagrams: s.diagrams ?? [], images: s.images ?? [],
+                         parts: [] });
+  // L'audio n'est pas conservé côté serveur : en rouvrant une séance on a le
+  // texte et les notes, pas le son. Les horodatages restent affichés, ils ne
+  // renvoient simplement plus nulle part.
+  $("parts").innerHTML = ""; $("player").hidden = true; $("player").removeAttribute("data-url");
   $("docTitle").value = s.doc?.title ?? "";
   $("docCourse").value = s.course ?? ""; $("docChapter").value = s.chapter ?? "";
   $("attachments").innerHTML = "";
@@ -696,57 +752,160 @@ async function openDoc(id) {
 }
 
 $("newBtn").onclick = () => {
-  Object.assign(state, { id: null, segments: [], attachments: [], doc: null, diagrams: [], images: [] });
+  Object.assign(state, { id: null, segments: [], attachments: [], doc: null, diagrams: [], images: [], parts: [] });
+  $("parts").innerHTML = ""; $("timer").textContent = "00:00";
   $("docTitle").value = ""; $("attachments").innerHTML = "";
   // La matière et le chapitre restent : on enchaîne en général sur le même cours.
   $("transcript").innerHTML = `<div class="empty">Rien encore.</div>`; $("tStats").hidden = true;
   $("sheet").innerHTML = `<div class="empty">Enregistre une séance ou dépose un document, puis génère les notes.</div>`;
-  $("player").hidden = true; $("saveState").textContent = ""; refresh(); show("ses");
+  $("player").hidden = true; $("player").removeAttribute("data-url");
+  updateRecStatus(); $("saveState").textContent = ""; refresh(); show("ses");
   applySolo(false);
 };
 
 // ------------------------------------------------------------ capture
+//
+// L'enregistrement se fait par PARTIES de cinq minutes, pas d'un seul bloc.
+// Trois raisons : un cours d'1 h 30 gardé en mémoire jusqu'à la fin est
+// fragile ; la transcription avance pendant le cours au lieu d'attendre
+// vingt minutes à l'arrêt ; et un incident ne coûte que la partie en cours.
+//
+// On redémarre le MediaRecorder à chaque partie plutôt que de découper son
+// flux : chaque partie est alors un fichier autonome et décodable. Le prix
+// est un trou de quelques centaines de millisecondes entre deux parties,
+// sans conséquence sur des notes de cours.
+const PART_MS = 5 * 60 * 1000;
 const BARS = 24;
 const bars = Array.from({ length: BARS }, () => { const b = document.createElement("div"); b.className = "bar"; $("levelWrap").appendChild(b); return b; });
-$("recBtn").onclick = () => (state.rec ? stopRec() : startRec());
+
+$("recBtn").onclick = () => (state.recording ? stopRec() : startRec());
 
 async function startRec() {
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true } }); }
-  catch { $("status").innerHTML = `<span class="err">micro refusé</span>`; return; }
-  const ctx = new AudioContext(); const an = ctx.createAnalyser(); an.fftSize = 512;
-  ctx.createMediaStreamSource(stream).connect(an);
+  try {
+    state.stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true } });
+  } catch { $("status").innerHTML = `<span class="err">micro refusé</span>`; return; }
+
+  state.audioCtx = new AudioContext();
+  const an = state.audioCtx.createAnalyser(); an.fftSize = 512;
+  state.audioCtx.createMediaStreamSource(state.stream).connect(an);
   const data = new Uint8Array(an.frequencyBinCount);
   const draw = () => {
-    if (!state.rec) { bars.forEach((b) => (b.style.height = "4px")); return; }
+    if (!state.recording) { bars.forEach((b) => (b.style.height = "4px")); return; }
     an.getByteFrequencyData(data); const step = Math.floor(data.length / BARS);
     bars.forEach((b, i) => { const v = data[i * step] / 255; b.style.height = `${4 + v * 28}px`;
                              b.style.background = v > 0.05 ? "var(--accent)" : "var(--line)"; });
     requestAnimationFrame(draw);
   };
+
+  // Une reprise s'ajoute à la suite : « le cours en deux parties » donne une
+  // seule timeline et donc un seul jeu de notes.
+  state.recording = true;
+  state.partBase = state.segments.length ? state.segments.at(-1).endMs : 0;
+  state.startedAt = Date.now();
+  recordPart();
+  draw();
+
+  $("recBtn").classList.add("recording"); $("recBtn").textContent = "■";
+  state.timer = setInterval(() => {
+    $("timer").textContent = fmt(state.partBase + (Date.now() - state.startedAt));
+  }, 250);
+  updateRecStatus();
+}
+
+function recordPart() {
   const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/mp4";
-  state.chunks = []; state.rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
-  state.rec.ondataavailable = (e) => e.data.size > 0 && state.chunks.push(e.data);
-  state.rec.onstop = () => { stream.getTracks().forEach((t) => t.stop()); ctx.close(); transcribe(new Blob(state.chunks, { type: mime }), mime); };
-  state.rec.start(1000); state.startedAt = Date.now(); draw();
-  $("recBtn").classList.add("recording"); $("recBtn").textContent = "■"; $("status").textContent = "enregistrement…";
-  state.timer = setInterval(() => ($("timer").textContent = fmt(Date.now() - state.startedAt)), 250);
+  const rec = new MediaRecorder(state.stream, { mimeType: mime, audioBitsPerSecond: 32000 });
+  const chunks = [];
+  const partStart = state.partBase + (Date.now() - state.startedAt);
+  rec.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
+  rec.onstop = () => {
+    clearTimeout(state.partTimer);
+    if (chunks.length) enqueuePart(new Blob(chunks, { type: mime }), mime, partStart);
+    if (state.recording) recordPart();
+    else {
+      state.stream.getTracks().forEach((t) => t.stop());
+      state.audioCtx?.close();
+    }
+  };
+  rec.start();
+  state.rec = rec;
+  state.partTimer = setTimeout(() => rec.stop(), PART_MS);
 }
+
 function stopRec() {
-  clearInterval(state.timer); state.rec.stop(); state.rec = null;
-  $("recBtn").classList.remove("recording"); $("recBtn").textContent = "●"; $("status").textContent = "transcription…";
+  state.recording = false;
+  clearInterval(state.timer);
+  clearTimeout(state.partTimer);
+  state.rec?.stop();
+  $("recBtn").classList.remove("recording"); $("recBtn").textContent = "●";
+  updateRecStatus();
 }
-async function transcribe(blob, mime) {
-  if (state.blobUrl) URL.revokeObjectURL(state.blobUrl);
-  state.blobUrl = URL.createObjectURL(blob); $("player").src = state.blobUrl; $("player").hidden = false;
-  const t0 = performance.now();
+
+/** File d'attente : une partie à la fois, pour ne pas saturer le moteur local. */
+async function enqueuePart(blob, mime, startMs) {
+  const part = { startMs, blob, url: URL.createObjectURL(blob), state: "en attente" };
+  state.parts.push(part);
+  renderParts();
+  state.queue = (state.queue ?? Promise.resolve()).then(() => transcribePart(part, mime));
+}
+
+async function transcribePart(part, mime) {
+  part.state = "transcription…"; renderParts(); updateRecStatus();
   try {
-    const r = await fetch("/transcribe", { method: "POST", body: blob, headers: { "Content-Type": "application/octet-stream", "X-Mime-Type": mime } });
-    const res = await r.json(); if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
-    state.segments = res.segments; renderTranscript(res, (performance.now() - t0) / 1000);
-    refresh(); markDirty(); $("status").textContent = "prêt";
-  } catch (e) { $("status").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+    const r = await fetch("/transcribe", { method: "POST", body: part.blob,
+      headers: { "Content-Type": "application/octet-stream", "X-Mime-Type": mime } });
+    const res = await r.json();
+    if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
+    // Les temps reviennent relatifs à la partie : on les replace sur la
+    // timeline de la séance avant de les fusionner.
+    for (const seg of res.segments) {
+      seg.startMs += part.startMs; seg.endMs += part.startMs;
+      for (const w of seg.words ?? []) { w.startMs += part.startMs; w.endMs += part.startMs; }
+    }
+    part.endMs = part.startMs + res.audioDurationMs;
+    part.state = `${res.segments.length} segments`;
+    state.segments.push(...res.segments);
+    state.segments.sort((a, b) => a.startMs - b.startMs);
+    renderTranscript({ segments: state.segments,
+                       audioDurationMs: state.segments.at(-1)?.endMs ?? 0, processingMs: 1 }, 0);
+    refresh(); markDirty();
+  } catch (e) {
+    part.state = `échec — ${e.message}`;
+    part.failed = true;
+  }
+  renderParts(); updateRecStatus();
 }
+
+function updateRecStatus() {
+  const pending = state.parts.filter((p) => !p.endMs && !p.failed).length;
+  const failed = state.parts.filter((p) => p.failed).length;
+  const bits = [];
+  if (state.recording) bits.push("enregistrement…");
+  if (pending) bits.push(`${pending} partie(s) en cours de transcription`);
+  if (failed) bits.push(`<span class="err">${failed} partie(s) en échec</span>`);
+  if (!bits.length) bits.push(state.segments.length ? "prêt" : "prêt à enregistrer");
+  $("status").innerHTML = bits.join(" · ");
+}
+
+function renderParts() {
+  const host = $("parts");
+  if (!state.parts.length) { host.innerHTML = ""; return; }
+  host.innerHTML = state.parts.map((p, i) => {
+    const dur = p.endMs ? fmt(p.endMs - p.startMs) : "…";
+    return `<div class="part${p.failed ? " ko" : ""}">
+      <span class="pi">${String(i + 1).padStart(2, "0")}</span>
+      <button class="pl" data-ms="${p.startMs}">${fmt(p.startMs)} → ${dur}</button>
+      <span class="ps">${esc(p.state)}</span>
+      ${p.failed ? `<button class="sm retry" data-i="${i}">réessayer</button>` : ""}</div>`;
+  }).join("");
+  for (const b of host.querySelectorAll(".pl")) b.onclick = () => seek(+b.dataset.ms);
+  for (const b of host.querySelectorAll(".retry")) b.onclick = () => {
+    const p = state.parts[+b.dataset.i]; p.failed = false;
+    state.queue = (state.queue ?? Promise.resolve()).then(() => transcribePart(p, p.blob.type));
+  };
+}
+
 function renderTranscript(res, wall) {
   const host = $("transcript"); host.innerHTML = "";
   if (!res.segments.length) { host.innerHTML = `<div class="empty">Aucune parole détectée.</div>`; return; }
@@ -759,12 +918,26 @@ function renderTranscript(res, wall) {
   }
   $("tStats").hidden = false;
   $("tStats").innerHTML = `<span>durée <b>${fmt(res.audioDurationMs)}</b></span><span>segments <b>${res.segments.length}</b></span>
-    ${wall ? `<span>en <b>${wall.toFixed(1)} s</b></span>` : ""}<span>coût <b>0,00 €</b></span>`;
+    ${state.parts.length ? `<span>parties <b>${state.parts.length}</b></span>` : ""}<span>coût <b>0,00 €</b></span>`;
 }
-const seek = (ms) => { const p = $("player"); if (!p.src) return; p.currentTime = ms / 1000; p.play(); };
+
+/** Un clic sur un horodatage retrouve la partie qui le contient. */
+function seek(ms) {
+  const part = state.parts.find((p) => ms >= p.startMs && (!p.endMs || ms < p.endMs))
+            ?? state.parts.filter((p) => p.startMs <= ms).at(-1);
+  const player = $("player");
+  if (!part) return;
+  if (player.dataset.url !== part.url) { player.src = part.url; player.dataset.url = part.url; player.hidden = false; }
+  player.currentTime = Math.max(0, (ms - part.startMs) / 1000);
+  player.play();
+}
+
 $("player").addEventListener("timeupdate", () => {
-  const ms = $("player").currentTime * 1000;
-  for (const el of document.querySelectorAll(".seg")) el.classList.toggle("playing", ms >= +el.dataset.start && ms < +el.dataset.end);
+  const part = state.parts.find((p) => p.url === $("player").dataset.url);
+  if (!part) return;
+  const ms = part.startMs + $("player").currentTime * 1000;
+  for (const el of document.querySelectorAll(".seg"))
+    el.classList.toggle("playing", ms >= +el.dataset.start && ms < +el.dataset.end);
 });
 
 // ------------------------------------------------------------ sources
