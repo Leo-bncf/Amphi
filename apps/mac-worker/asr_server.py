@@ -69,7 +69,8 @@ class Transcriber:
         return self._warmed
 
     def transcribe(
-        self, audio: np.ndarray, lexicon: list[str] | None, previous_text: str | None
+        self, audio: np.ndarray, lexicon: list[str] | None, previous_text: str | None,
+        language: str | None = None,
     ) -> dict[str, Any]:
         import mlx_whisper
 
@@ -88,10 +89,21 @@ class Transcriber:
                 audio,
                 path_or_hf_repo=self.model_repo,
                 word_timestamps=True,
-                # Jamais imposée : les cours mélangent français et anglais, et
-                # forcer une langue fait halluciner sur les passages de l'autre.
-                language=None,
+                # Imposée quand l'appelant la connaît : en enregistrement par
+                # parties, la détection automatique juge chaque tranche
+                # séparément et peut basculer en cours de cours.
+                language=language,
                 initial_prompt=initial_prompt,
+                # Sur un micro lointain, Whisper part en boucle — « shocking
+                # shocking shocking… » — parce qu'il se conditionne sur son
+                # propre texte précédent. Couper ce report casse la boucle.
+                condition_on_previous_text=False,
+                # Seuils de rejet : en dessous, le segment est du bruit décodé
+                # comme de la parole. Mesuré sur un vrai cours d'amphi, ça
+                # supprime 26 % des segments pour seulement 15 % des mots.
+                no_speech_threshold=0.6,
+                logprob_threshold=-1.0,
+                compression_ratio_threshold=2.4,
                 verbose=False,
             )
         return {"result": result, "processingMs": (time.perf_counter() - start) * 1000}
@@ -153,7 +165,15 @@ def battery_status() -> tuple[bool, int | None]:
 def to_asr_result(raw: dict[str, Any], processing_ms: float, model: str, duration_s: float) -> dict[str, Any]:
     """Traduit la sortie de Whisper vers le contrat AsrResult de packages/shared."""
     segments: list[dict[str, Any]] = []
+    previous_text = None
     for seg in raw.get("segments", []):
+        # Whisper répète parfois la même phrase des dizaines de fois sur du
+        # silence. Deux segments consécutifs identiques : le second est un
+        # artefact, pas une répétition de l'enseignant.
+        current = seg.get("text", "").strip()
+        if current and current == previous_text:
+            continue
+        previous_text = current
         words = [
             {
                 "text": w.get("word", "").strip(),
@@ -244,7 +264,10 @@ class Handler(BaseHTTPRequestHandler):
             audio = decode_to_pcm(data, suffix_for(mime))
             if audio.size == 0:
                 raise ValueError("audio vide après décodage")
-            outcome = self.transcriber.transcribe(audio, lexicon, previous)
+            language = self.headers.get("X-Language") or None
+            if language in ("", "auto"):
+                language = None
+            outcome = self.transcriber.transcribe(audio, lexicon, previous, language)
         except ValueError as exc:
             self._send(400, {"error": str(exc)})
             return

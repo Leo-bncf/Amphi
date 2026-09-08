@@ -946,6 +946,49 @@ def purge_old_audio() -> int:
     return removed
 
 
+# En dessous, un segment est du bruit décodé comme de la parole. Il reste dans
+# la transcription — l'étudiant peut vouloir le voir — mais n'est pas envoyé au
+# modèle : le nourrir de « the data and the data of the data » ne l'aide pas.
+MIN_SEGMENT_CONFIDENCE = float(os.environ.get("AMPHI_MIN_CONFIDENCE", "0.35"))
+
+
+def lexicon_for_course(course: str, limit: int = 60) -> list[str]:
+    """
+    Vocabulaire du cours, tiré des séances déjà transcrites.
+
+    C'est le biasing ASR du §3.2, alimenté par ce qu'on a déjà : les termes du
+    glossaire et les titres des séances précédentes du même cours. Whisper
+    reconnaît nettement mieux « gradient boosting » ou « heteroskedasticity »
+    quand ils figurent dans son prompt initial.
+    """
+    course = (course or "").strip()
+    if not course or not DATA_DIR.exists():
+        return []
+    terms: list[str] = []
+    seen = set()
+    for path in sorted(DATA_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            payload = json.loads(path.read_text("utf-8"))
+        except (ValueError, OSError):
+            continue
+        if (payload.get("course") or "").strip() != course:
+            continue
+        doc = payload.get("doc") or {}
+        candidates = [str(e.get("term", "")) for e in (doc.get("glossary") or []) if isinstance(e, dict)]
+        candidates += [str(b.get("term", "")) for b in (doc.get("blocks") or [])
+                       if isinstance(b, dict) and b.get("type") == "definition"]
+        candidates.append(str(doc.get("title", "")))
+        for term in candidates:
+            term = term.strip()
+            key = term.lower()
+            if term and key not in seen and 2 < len(term) < 60:
+                seen.add(key)
+                terms.append(term)
+        if len(terms) >= limit:
+            break
+    return terms[:limit]
+
+
 def list_documents() -> list[dict[str, Any]]:
     """Index de la bibliothèque : on lit l'en-tête de chaque fichier, pas tout le corps."""
     if not DATA_DIR.exists():
@@ -1055,6 +1098,12 @@ class StudioHandler(AsrHandler):
                     out.append({"stamp": f.stem, "savedAt": payload.get("savedAt"),
                                 "title": doc.get("title"), "blocks": len(doc.get("blocks") or [])})
             self._send(200, {"versions": out})
+            return
+        if self.path.startswith("/lexicon"):
+            from urllib.parse import parse_qs, urlparse
+
+            course = (parse_qs(urlparse(self.path).query).get("course") or [""])[0]
+            self._send(200, {"course": course, "terms": lexicon_for_course(course)})
             return
         if self.path.startswith("/search"):
             from urllib.parse import parse_qs, urlparse
@@ -1187,9 +1236,18 @@ class StudioHandler(AsrHandler):
         if not segments and not attachments:
             raise ValueError("ni transcription ni pièce jointe : rien à résumer")
 
+        # Les indices restent GLOBAUX : un bloc doit pouvoir citer [s412] même
+        # si les segments 400 à 411 ont été écartés comme bruit.
+        usable = [(i, s) for i, s in enumerate(segments)
+                  if float(s.get("avgConfidence") or 0) >= MIN_SEGMENT_CONFIDENCE]
+        dropped = len(segments) - len(usable)
+        if dropped:
+            LOG.info("bruit écarté avant génération : %d segments sur %d", dropped, len(segments))
+
         parts = []
-        if segments:
-            parts.append("TRANSCRIPTION DE LA SÉANCE\n" + "\n".join(f"[s{i}] {s['text']}" for i, s in enumerate(segments)))
+        if usable:
+            parts.append("TRANSCRIPTION DE LA SÉANCE\n"
+                         + "\n".join(f"[s{i}] {s['text']}" for i, s in usable))
         if attachments:
             parts.append(
                 "DOCUMENTS FOURNIS — photos du tableau, diapositives, notes collées\n"
@@ -1306,6 +1364,7 @@ class StudioHandler(AsrHandler):
                 "enrichments": enrichments,
                 "glossary": glossary,
                 "rejectedBlocks": rejected,
+                "noisySegments": dropped,
                 "language": lang_code,
                 "model": engine,
                 "costEuros": "0,0000 € (local)" if usage.get("prompt_tokens", 0) == 0 else f"{cost / 1000:.4f} €",

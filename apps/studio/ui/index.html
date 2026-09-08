@@ -586,7 +586,7 @@ mermaid.initialize({ startOnLoad: false, theme: matchMedia("(prefers-color-schem
 const state = { id: null, rec: null, recording: false, stream: null, audioCtx: null,
                 startedAt: 0, partBase: 0, partTimer: null, timer: null, queue: null,
                 parts: [], segments: [], attachments: [], doc: null, diagrams: [], images: [],
-                dirty: false };
+                lexicon: [], dirty: false };
 
 const fmt = (ms) => { const s = Math.floor(ms / 1000);
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
@@ -929,6 +929,16 @@ async function startRec() {
   // L'identifiant est attribué dès l'enregistrement, pas à la sauvegarde :
   // c'est lui qui range l'audio sur le serveur au fur et à mesure.
   state.id ??= `${slug($("docTitle").value || "seance")}-${Date.now().toString(36)}`;
+  // Vocabulaire du cours : les termes des séances précédentes de la même
+  // matière servent d'amorce à Whisper. C'est ce qui fait la différence entre
+  // « gradient boosting » et « gradient bousting ».
+  try {
+    const course = $("docCourse").value.trim();
+    state.lexicon = course
+      ? (await (await fetch(`/lexicon?course=${encodeURIComponent(course)}`)).json()).terms
+      : [];
+  } catch { state.lexicon = []; }
+
   state.recording = true;
   state.partBase = state.segments.length ? state.segments.at(-1).endMs : 0;
   state.startedAt = Date.now();
@@ -983,8 +993,17 @@ async function enqueuePart(blob, mime, startMs) {
 async function transcribePart(part, mime) {
   part.state = "transcription…"; renderParts(); updateRecStatus();
   try {
-    const r = await fetch("/transcribe", { method: "POST", body: part.blob,
-      headers: { "Content-Type": "application/octet-stream", "X-Mime-Type": mime } });
+    // La langue est imposée si elle est connue : en enregistrement par parties,
+    // la détection automatique juge chaque tranche isolément et peut basculer
+    // au milieu du cours. Le texte précédent donne la continuité.
+    const headers = { "Content-Type": "application/octet-stream", "X-Mime-Type": mime };
+    const lang = $("langSel").value;
+    if (lang && lang !== "auto") headers["X-Language"] = lang;
+    if (state.lexicon?.length) headers["X-Lexicon"] = JSON.stringify(state.lexicon.slice(0, 60));
+    const tail = state.segments.slice(-6).map((s) => s.text).join(" ").replace(/\s+/g, " ").slice(-400);
+    if (tail) headers["X-Previous-Text"] = tail;
+
+    const r = await fetch("/transcribe", { method: "POST", body: part.blob, headers });
     const res = await r.json();
     if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
     // Les temps reviennent relatifs à la partie : on les replace sur la
@@ -1259,6 +1278,9 @@ function renderSheet() {
     parts.push(`</dl></div>`);
   }
   if (d.rejectedBlocks > 0) parts.push(`<p class="err noprint">${d.rejectedBlocks} bloc(s) écarté(s) : source non concordante.</p>`);
+  if (d.noisySegments > 0) parts.push(`<p class="noprint" style="font-family:var(--font-data);font-size:var(--t-xs);color:var(--neutral)">
+    ${d.noisySegments} segment(s) trop peu fiables écartés avant génération — ils restent visibles dans la transcription.
+    Un micro plus proche du tableau réduirait ce chiffre bien plus que n'importe quel réglage.</p>`);
   if (d.fallbackNote) parts.push(`<p class="err noprint">${esc(d.fallbackNote)}</p>`);
   parts.push(`<div class="stats noprint"><span>modèle <b>${esc(d.model)}</b></span><span>coût <b>${esc(d.costEuros)}</b></span>
     <span>en <b>${(d.latencyMs / 1000).toFixed(1)} s</b></span></div></div>`);
