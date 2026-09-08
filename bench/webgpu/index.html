@@ -69,8 +69,11 @@
   </label>
   <label>Audio
     <select id="audio">
-      <option value="/bench-audio/cours-regularisation.wav">cours de test — 5 min 31</option>
+      <option value="/bench-audio/cours-regularisation.wav">cours de test — 5 min 31, français</option>
     </select>
+  </label>
+  <label>Langue
+    <select id="lang"><option value="fr" selected>français</option><option value="en">anglais</option></select>
   </label>
   <p style="margin:12px 0 0"><button class="go" id="run">Lancer la mesure</button></p>
 </fieldset>
@@ -129,7 +132,12 @@ $("run").onclick = async () => {
     let lastPct = -1;
     const asr = await pipeline("automatic-speech-recognition", model, {
       device,
-      dtype: device === "webgpu" ? { encoder_model: "fp16", decoder_model_merged: "q4" } : "q8",
+      // La quantification 4 bits est faite pour les gros modèles. Sur base ou
+      // small, elle détruit le décodeur — d'où « et les deux et les deux… »,
+      // une boucle qui n'est pas un défaut du modèle mais de sa compression.
+      dtype: device !== "webgpu" ? "q8"
+        : model.includes("large") ? { encoder_model: "fp16", decoder_model_merged: "q4" }
+        : { encoder_model: "fp32", decoder_model_merged: "fp32" },
       progress_callback: (p) => {
         if (p.status !== "progress") return;
         const pct = Math.floor(p.progress ?? 0);
@@ -140,13 +148,36 @@ $("run").onclick = async () => {
     log(`chargé en ${loadS.toFixed(1)} s`);
 
     const t1 = performance.now();
-    const out = await asr(pcm, { chunk_length_s: 30, stride_length_s: 5, language: "fr", return_timestamps: true });
+    const out = await asr(pcm, {
+      chunk_length_s: 30, stride_length_s: 5,
+      language: $("lang").value, task: "transcribe", return_timestamps: true,
+      // Garde-fous anti-boucle, l'équivalent navigateur de ce qu'on fait côté
+      // serveur : interdire la répétition d'un même trigramme, et pénaliser
+      // la reprise de ce qui vient d'être écrit.
+      no_repeat_ngram_size: 4, repetition_penalty: 1.15,
+    });
     const runS = (performance.now() - t1) / 1000;
     const rtf = seconds / runS;
 
-    const verdict = rtf >= 3 ? ["tient", "ok"] : rtf >= 1 ? ["juste — pas de marge", "ko"] : ["insuffisant", "ko"];
+    const wordsAll = (out.text ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+    const counts = {};
+    for (const w of wordsAll) counts[w] = (counts[w] ?? 0) + 1;
+    const looped = wordsAll.length > 40 &&
+      Math.max(0, ...Object.values(counts)) / wordsAll.length > 0.2;
+    const verdict = looped ? ["sortie en boucle", "ko"]
+      : rtf >= 3 ? ["tient", "ok"] : rtf >= 1 ? ["juste — pas de marge", "ko"] : ["insuffisant", "ko"];
     log(`transcrit en ${runS.toFixed(1)} s → ${rtf.toFixed(2)}× le temps réel — ${verdict[0]}`);
-    log(`extrait : ${(out.text ?? "").trim().slice(0, 130)}…`);
+    // Une boucle se détecte à l'œil, mais mieux vaut la mesurer : si un mot
+    // occupe plus d'un cinquième du texte, la sortie est inexploitable quel
+    // que soit le facteur temps réel.
+    const words = (out.text ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+    const freq = {};
+    for (const w of words) freq[w] = (freq[w] ?? 0) + 1;
+    const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0] ?? ["", 0];
+    const share = words.length ? top[1] / words.length : 0;
+    log(`${words.length} mots · mot le plus fréquent « ${top[0]} » ${(share * 100).toFixed(0)} %`);
+    if (share > 0.2) log(`  ⚠ SORTIE EN BOUCLE — inexploitable, le facteur temps réel ne veut rien dire`);
+    log(`extrait : ${(out.text ?? "").trim().slice(0, 150)}…`);
 
     const row = $("results").querySelector("tbody").insertRow();
     row.innerHTML = `<td>${model.split("/").pop()}</td><td>${device}</td>
