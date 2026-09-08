@@ -1026,6 +1026,54 @@ class StudioHandler(AsrHandler):
     def _api_key(self) -> str:
         return os.environ.get("MISTRAL_API_KEY", "")
 
+    def log_request(self, code: str | int = "-", size: str | int = "-") -> None:
+        """
+        Journal d'accès lisible, hors ressources statiques.
+
+        Sur un serveur partagé, savoir ce qui se passe compte plus que d'avoir
+        un journal court — mais lister chaque police et chaque image le rendrait
+        illisible.
+        """
+        if any(self.path.startswith(p) for p in ("/vendor/", "/bench-audio/", "/audio/")):
+            return
+        origin = self.headers.get("Origin")
+        source = " (app)" if origin and origin.startswith("tauri") else ""
+        LOG.info("%s %s → %s%s", self.command, self.path.split("?")[0], code, source)
+
+    def _cors(self) -> None:
+        """
+        L'application de bureau appelle depuis l'origine `tauri://localhost`.
+        Sans ces en-têtes, le navigateur embarqué refuse toutes les requêtes.
+        On renvoie l'origine exacte plutôt que « * » : un joker interdit
+        l'envoi des identifiants.
+        """
+        origin = self.headers.get("Origin")
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Credentials", "true")
+            self.send_header("Vary", "Origin")
+
+    def _send(self, status: int, payload: dict[str, Any]) -> None:
+        blob = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(blob)))
+        self._cors()
+        self.end_headers()
+        self.wfile.write(blob)
+
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        """Préflight : le navigateur le déclenche dès qu'on envoie un en-tête maison."""
+        self.send_response(204)
+        self._cors()
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers",
+                         "Content-Type, Authorization, X-Mime-Type, X-Lexicon, "
+                         "X-Previous-Text, X-Language")
+        self.send_header("Access-Control-Max-Age", "86400")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def _authorized(self) -> bool:
         """Authentification HTTP Basic. Comparaison à temps constant."""
         if not AMPHI_PASSWORD:
@@ -1142,6 +1190,7 @@ class StudioHandler(AsrHandler):
         # garde l'ancienne page et on croit que rien n'a été corrigé. Les
         # ressources vendorisées, elles, ne bougent jamais — on les laisse en cache.
         self.send_header("Cache-Control", cache or "no-store, must-revalidate")
+        self._cors()
         self.end_headers()
         self.wfile.write(blob)
 

@@ -580,6 +580,27 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
 <script type="module">
 const mermaid = globalThis.mermaid;
 const $ = (id) => document.getElementById(id);
+
+// Base des appels réseau. Vide dans le navigateur — même origine — et définie
+// par l'application de bureau, qui affiche une interface locale mais parle au
+// serveur de la promo.
+const API = (globalThis.AMPHI_API ?? "").replace(/\/$/, "");
+const api = (path) => API + path;
+
+// Dans l'application de bureau, les requêtes partent d'une autre origine que
+// le serveur : le navigateur embarqué n'a pas de session et ne peut pas
+// afficher la boîte d'authentification. On attache donc l'identifiant nous-mêmes.
+if (globalThis.AMPHI_AUTH && API) {
+  const nativeFetch = globalThis.fetch.bind(globalThis);
+  const header = "Basic " + btoa("amphi:" + globalThis.AMPHI_AUTH);
+  globalThis.fetch = (input, init = {}) => {
+    const url = typeof input === "string" ? input : input?.url ?? "";
+    if (!url.startsWith(API)) return nativeFetch(input, init);
+    const headers = new Headers(init.headers ?? {});
+    headers.set("Authorization", header);
+    return nativeFetch(input, { ...init, headers, credentials: "omit" });
+  };
+}
 mermaid.initialize({ startOnLoad: false, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "neutral",
                      securityLevel: "strict" });
 
@@ -615,7 +636,7 @@ try { applySolo(localStorage.getItem(SOLO_KEY) === "1"); } catch { applySolo(fal
 
 async function checkEngine() {
   try {
-    const h = await (await fetch("/health")).json();
+    const h = await (await fetch(api("/health"))).json();
     $("engine").textContent = h.warm ? `${h.model.split("/").pop()} · ${h.batteryPercent === null ? "secteur" : h.batteryPercent + "%"}` : "chargement…";
     if (!h.warm) setTimeout(checkEngine, 2000);
   } catch { $("engine").textContent = "serveur injoignable"; }
@@ -629,7 +650,7 @@ checkEngine();
 const lib = { docs: [], course: null, chapter: null, query: "" };
 
 async function loadLibrary() {
-  lib.docs = (await (await fetch("/docs")).json()).docs;
+  lib.docs = (await (await fetch(api("/docs"))).json()).docs;
   renderLibrary();
 }
 
@@ -686,7 +707,7 @@ function docRow(d) {
   el.querySelector(".del").onclick = async (e) => {
     e.stopPropagation();
     if (!confirm(`Supprimer « ${d.title} » ? C'est définitif.`)) return;
-    await fetch("/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: d.id }) });
+    await fetch(api("/delete"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: d.id }) });
     loadLibrary();
   };
   return el;
@@ -738,7 +759,7 @@ function renderTree() {
     el.ondrop = async (e) => {
       e.preventDefault(); el.classList.remove("drop");
       const d = lib.dragging; if (!d) return;
-      await fetch("/move", { method: "POST", headers: { "Content-Type": "application/json" },
+      await fetch(api("/move"), { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: d.id, course: dropCourse,
                                chapter: dropChapter === null ? (d.chapter || "") : dropChapter }) });
       loadLibrary();
@@ -769,7 +790,7 @@ $("q").addEventListener("input", () => {
 async function renderSearch() {
   const host = $("lib"); host.className = "";
   $("crumb").innerHTML = `<span class="now">Recherche</span><span class="sep">·</span><span>${esc(lib.query)}</span>`;
-  const { results } = await (await fetch(`/search?q=${encodeURIComponent(lib.query)}`)).json();
+  const { results } = await (await fetch(api(`/search?q=${encodeURIComponent(lib.query)}`))).json();
   if (!results.length) { host.innerHTML = `<div class="empty">Rien trouvé pour « ${esc(lib.query)} ».</div>`; return; }
   host.innerHTML = "";
   for (const r of results) {
@@ -792,7 +813,7 @@ function mark(snippet, query) {
 }
 
 async function openDoc(id) {
-  const s = await (await fetch(`/load?id=${encodeURIComponent(id)}`)).json();
+  const s = await (await fetch(api(`/load?id=${encodeURIComponent(id)}`))).json();
   if (s.empty) return;
   Object.assign(state, { id, segments: s.segments ?? [], attachments: s.attachments ?? [],
                          doc: s.doc ?? null, diagrams: s.diagrams ?? [], images: s.images ?? [],
@@ -935,7 +956,7 @@ async function startRec() {
   try {
     const course = $("docCourse").value.trim();
     state.lexicon = course
-      ? (await (await fetch(`/lexicon?course=${encodeURIComponent(course)}`)).json()).terms
+      ? (await (await fetch(api(`/lexicon?course=${encodeURIComponent(course)}`))).json()).terms
       : [];
   } catch { state.lexicon = []; }
 
@@ -1003,7 +1024,7 @@ async function transcribePart(part, mime) {
     const tail = state.segments.slice(-6).map((s) => s.text).join(" ").replace(/\s+/g, " ").slice(-400);
     if (tail) headers["X-Previous-Text"] = tail;
 
-    const r = await fetch("/transcribe", { method: "POST", body: part.blob, headers });
+    const r = await fetch(api("/transcribe"), { method: "POST", body: part.blob, headers });
     const res = await r.json();
     if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
     // Les temps reviennent relatifs à la partie : on les replace sur la
@@ -1017,7 +1038,7 @@ async function transcribePart(part, mime) {
     // L'audio part sur le serveur une fois la transcription réussie : on ne
     // stocke pas ce qu'on n'a pas pu exploiter.
     try {
-      const up = await fetch(`/audio?id=${encodeURIComponent(state.id)}&seq=${part.seq}&mime=${encodeURIComponent(mime)}`,
+      const up = await fetch(api(`/audio?id=${encodeURIComponent(state.id)}&seq=${part.seq}&mime=${encodeURIComponent(mime)}`),
         { method: "POST", body: part.blob, headers: { "Content-Type": "application/octet-stream" } });
       if (up.ok) part.url = (await up.json()).url;
     } catch { /* l'audio local reste utilisable dans cette session */ }
@@ -1153,7 +1174,7 @@ async function addAttachment(payload, preview) {
   card.innerHTML = `<div class="top"><b>${esc(payload.name)}</b><span class="tag">lecture…</span></div>`;
   $("attachments").appendChild(card);
   try {
-    const r = await fetch("/attachment", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const r = await fetch(api("/attachment"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const res = await r.json(); if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
     const i = state.attachments.length;
     state.attachments.push({ name: res.name, text: res.text, kind: res.kind });
@@ -1181,7 +1202,7 @@ $("notesBtn").onclick = async () => {
   const b = $("notesBtn"); b.disabled = true; b.textContent = "génération…"; $("notesErr").textContent = "";
   try {
     const keepEdited = (state.doc?.blocks ?? []).filter((x) => x.edited).map((x) => x.text ?? x.definition ?? "");
-    const r = await fetch("/notes", { method: "POST", headers: { "Content-Type": "application/json" },
+    const r = await fetch(api("/notes"), { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ segments: state.segments, attachments: live(), keepEdited,
                              enrich: $("enrichChk").checked, language: $("langSel").value }) });
     const res = await r.json(); if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
@@ -1379,7 +1400,7 @@ $("diagBtn").onclick = async () => {
     const context = state.doc
       ? [state.doc.summary, ...state.doc.blocks.map((x) => x.text ?? `${x.term} : ${x.definition}`)].join("\n")
       : state.segments.map((s) => s.text).join(" ");
-    const r = await fetch("/diagram", { method: "POST", headers: { "Content-Type": "application/json" },
+    const r = await fetch(api("/diagram"), { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ context: context.slice(0, 12000), instruction, language: state.doc?.language ?? "fr" }) });
     const res = await r.json(); if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
     if (!res.mermaid?.trim()) { $("notesErr").textContent = res.explanation || "Ce passage ne se prête pas à un schéma."; return; }
@@ -1511,7 +1532,7 @@ Notes prises avec Amphi · ${new Date().toLocaleDateString("fr-FR", { dateStyle:
  * mauvaise génération effaçait une heure de cours sans retour possible.
  */
 $("verBtn").onclick = async () => {
-  const { versions } = await (await fetch(`/versions?id=${encodeURIComponent(state.id)}`)).json();
+  const { versions } = await (await fetch(api(`/versions?id=${encodeURIComponent(state.id)}`))).json();
   const back = document.createElement("div"); back.className = "modal";
   back.innerHTML = `<div class="sheetlet">
     <div class="mt">Versions précédentes</div>
@@ -1529,7 +1550,7 @@ $("verBtn").onclick = async () => {
   back.querySelector("#vX").onclick = close;
   for (const row of back.querySelectorAll(".vrow")) row.onclick = async () => {
     if (!confirm("Restaurer cette version ? L'état actuel sera archivé, pas perdu.")) return;
-    await fetch("/restore", { method: "POST", headers: { "Content-Type": "application/json" },
+    await fetch(api("/restore"), { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: state.id, stamp: row.dataset.s }) });
     close(); openDoc(state.id);
   };
@@ -1545,7 +1566,7 @@ async function save() {
   const place = [$("docCourse").value, $("docChapter").value].filter((x) => x.trim()).map(slug).join("-");
   state.id ??= `${place ? place + "-" : ""}${slug(title)}-${Date.now().toString(36)}`;
   try {
-    await fetch("/save", { method: "POST", headers: { "Content-Type": "application/json" },
+    await fetch(api("/save"), { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: state.id, doc: state.doc, diagrams: state.diagrams.filter(Boolean),
                              images: state.images.filter(Boolean), attachments: live(),
                              // On garde l'emplacement de l'audio, jamais l'audio lui-même.

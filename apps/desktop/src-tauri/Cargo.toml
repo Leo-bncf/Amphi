@@ -1,0 +1,22 @@
+[package]
+name = "amphi"
+version = "0.1.0"
+edition = "2021"
+description = "Amphi — notes de cours"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# La compilation par defaut de Rust est lente a l'execution ; on optimise le
+# binaire livre, la transcription en depend directement.
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
