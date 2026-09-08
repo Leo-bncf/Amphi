@@ -18,7 +18,7 @@ Une PWA offline-first qui enregistre le cours depuis plusieurs téléphones, tra
 | 2 | **La bonne machine pour l'IA, c'est ton MacBook, pas tes serveurs.** Mesuré : le M4 transcrit à **9,9× le temps réel** (Whisper large-v3-turbo, MLX/Metal), là où les ProLiant de 2012 (Xeon E5, DDR3, sans GPU) sont un ordre de grandeur en dessous pour quatre fois la consommation. Et il est déjà dans l'amphi : ton propre scénario, c'est téléphone sur la table + laptop pour éditer. | **Worker ASR local sur ton Mac** (ADR-15), repli payant quand il dort. La règle générale : *héberger* l'app sur une machine déjà allumée coûte quelques watts, donc rien ; *inférer* sature un CPU pendant des heures, donc c'est facturé — par EDF au lieu d'un fournisseur d'API, et à chaque mesure EDF est plus cher. |
 | 3 | **Le budget final est de ~2,80 €/mois, et la fusion redevient le comportement par défaut.** L'ASR local rend `K` gratuit, et sous Haiku 4.5 les modèles se tiennent à 22 centimes par mois d'écart — le prix cesse d'être le critère. | **Fusion à 3 flux sur toutes les heures**, résumés live, document final par **Mistral Small 4** (ADR-16). Le chiffre que tu avais validé, 7,16 €/mois, devient le **pire cas** — Mac éteint tout le mois — au lieu du cas nominal. Voir [§11](#11-coûts). |
 | 4 | **La sync temporelle décrite au §3.3 du brief (corrélation sur les 60 premières secondes) ne peut pas tenir le critère « < 200 ms après 60 min ».** Les horloges d'échantillonnage audio des téléphones dérivent de 10 à 100 ppm, soit jusqu'à **360 ms/heure** — la dérive est le terme dominant, pas l'offset initial. | Je propose un **ré-ancrage continu** (offset + pente estimés en continu sur toute la séance), pas un calage unique. Voir [§5.1](#51-synchronisation-temporelle). Sans ça, le critère d'acceptation est inatteignable. |
-| 5 | **`MediaRecorder` est un piège sur iOS** (pas d'Opus, chunks non décodables indépendamment) et **Safari suspend la capture quand l'écran se verrouille** — or le scénario nominal est « téléphone posé sur la table ». | Capture via **AudioWorklet → PCM → encodage Opus dans un Worker**, chunks autonomes ; + Wake Lock, détection de trous, test réel de 90 min en semaine 1. Voir [§4](#4--capture-audio). C'est le risque n°1 du projet. |
+| 5 | ~~**`MediaRecorder` est un piège sur iOS.**~~ **Corrigé le 2026-09-08 : il n'y a pas d'iPhone, la capture se fait depuis le laptop.** Toute la complexité prévue — AudioWorklet, Wake Lock, détection de trous, chunks Opus autonomes — existait pour contourner la suspension de Safari sur iOS. Sur macOS, ce problème n'existe pas. | **Le risque n°1 du projet disparaît.** M1 capture avec `MediaRecorder` dans le navigateur du Mac, ce qui suffit. Le chemin AudioWorklet redevient nécessaire en **M3** seulement, et pour une autre raison : l'enveloppe d'énergie du ré-ancrage temporel exige un accès au PCM. Voir [§4](#4--capture-audio). |
 | 6 | **La fusion n'apporte un gain réel qu'à partir de 3 flux.** À 2 flux, ROVER n'a pas de majorité et se réduit à « faire confiance au meilleur flux ». | Le critère « WER canonique < meilleur flux » sera prouvé sur banc synthétique à N=3..5 ; à N=2 l'objectif est le *marquage* des désaccords, pas le gain de WER. Dit franchement dans les tests. |
 | 7 | **Les erreurs ASR entre téléphones d'un même amphi sont corrélées** (si le prof est inaudible, tout le monde se trompe pareil). La littérature ROVER donne 10–20 % de réduction relative de WER, pas 50 %. | Le banc de test inclut un mode « erreurs corrélées » qui vérifie la **non-régression**, pas seulement le gain. Ne promettons pas ce qu'on ne tiendra pas. |
 
@@ -154,7 +154,11 @@ Format court : décision, raison, alternative écartée. Les ADR marqués **↯*
 
 ## 4. Capture audio
 
-### 4.1 Le problème iOS (risque n°1)
+### 4.1 Le problème iOS — hors périmètre depuis le 2026-09-08
+
+> **Cette section ne s'applique plus au scénario principal.** Leo n'a pas d'iPhone : la capture se fait depuis le navigateur du MacBook, où aucune de ces trois limites n'existe. Elle est conservée parce qu'elle redeviendra pertinente le jour où un camarade voudra enregistrer depuis un téléphone — et parce qu'elle explique pourquoi le chemin AudioWorklet reste dans le plan pour M3.
+
+#### Les trois limites de Safari sur iOS
 
 Le scénario nominal du brief — *téléphone posé sur la table pendant 90 minutes* — se heurte à trois limites de Safari :
 
@@ -162,7 +166,13 @@ Le scénario nominal du brief — *téléphone posé sur la table pendant 90 min
 2. **Chunks non autonomes.** Avec `start(timeslice)`, seuls le premier blob contient l'en-tête ; les suivants ne sont pas décodables seuls. Un pipeline « 1 chunk = 1 fichier à transcrire » casse.
 3. **Suspension en arrière-plan.** Écran verrouillé ou onglet en fond → la capture s'arrête ou devient erratique.
 
-### 4.2 La réponse
+### 4.2 Ce que fait M1 — capture depuis le laptop
+
+`MediaRecorder` dans le navigateur du Mac, séance enregistrée d'un bloc, transcrite à l'arrêt. Chrome produit du `webm/opus`, Safari du `mp4/aac` ; les deux sont décodés côté serveur par le ffmpeg statique du worker. Rien de plus n'est nécessaire pour le jalon.
+
+### 4.3 Ce que M3 exigera en plus
+
+Le chemin ci-dessous n'est pas abandonné, il est **repoussé** — et pour une raison qui n'a rien à voir avec iOS : le ré-ancrage temporel entre appareils ([§5.1](#51-synchronisation-temporelle)) a besoin d'une **enveloppe d'énergie à 50 Hz**, donc d'un accès au PCM, que `MediaRecorder` ne donne pas. La fusion multi-appareils impose donc l'AudioWorklet, indépendamment du système.
 
 ```
 getUserMedia → AudioContext(16 kHz) → AudioWorklet
@@ -517,8 +527,8 @@ Sur de la synthèse vocale — signal parfait, sans réverbération d'amphi ni b
 
 | # | Risque | Gravité | Mitigation | Quand on saura |
 |---|---|---|---|---|
-| R1 | **iOS coupe l'enregistrement écran verrouillé** | 🔴 Critique — casse le scénario nominal | Wake Lock, détection de trous, consigne explicite, repli sur un flux Android | Test réel semaine 1 |
-| R2 | **Acoustique d'amphi** : téléphone à 20 m d'un prof sans micro → WER > 40 %, aucune fusion ne rattrape ça | 🔴 Critique | Sélection des flux par SNR, alerte « qualité insuffisante » en direct, encourager un téléphone au 1er rang. À terme : un enregistreur dédié devant | Premier vrai cours |
+| R1 | ~~iOS coupe l'enregistrement écran verrouillé~~ | 🟢 **Éliminé** | Le scénario est laptop-first : pas d'iPhone dans la boucle. Le risque reviendrait si un camarade enregistrait depuis un téléphone, ce qui reste possible mais n'est plus le cas nominal | Résolu le 2026-09-08 |
+| R2 | **Acoustique d'amphi** — devenu le risque n°1 : laptop à 20 m d'un prof sans micro → WER > 40 %, aucune fusion ne rattrape ça | 🔴 Critique | Sélection des flux par SNR, alerte « qualité insuffisante » en direct, encourager un téléphone au 1er rang. À terme : un enregistreur dédié devant | Premier vrai cours |
 | R3 | **Erreurs corrélées** → gain de fusion faible | 🟠 | Test de non-régression, honnêteté sur la promesse | M3 |
 | R4 | **Worker ASR unique** : si Leo est absent ou son Mac endormi, tout bascule en repli — `K = 1`, donc pas de fusion sur ces séances | 🟠 | Fusion rétroactive dès que le Mac se rebranche (l'audio dort 7 jours) ; coût borné à 7,14 €/mois même en repli permanent | Dès l'usage |
 | R5 | **Coupure de courant ou d'internet chez toi pendant un cours** | 🟠 | La file offline côté client absorbe : l'enregistrement continue sur le téléphone, la synchro se fait au retour. Le critère « < 3 min » se dégrade, **aucune donnée n'est perdue**. | Premier incident |
@@ -584,7 +594,7 @@ Toutes les questions ouvertes sont refermées. Il me manque **ta validation expl
 
 Dès que tu donnes le feu vert, M1 commence par les trois mesures qui peuvent invalider des pans entiers du plan, avant toute fonctionnalité :
 
-1. **Capture 90 minutes sur iPhone, écran verrouillé.** Si ça échoue, le produit change de forme — mieux vaut le savoir avant d'écrire le pipeline de consensus.
+1. ~~**Capture 90 minutes sur iPhone, écran verrouillé.**~~ ✅ **Sans objet** : la capture se fait sur le laptop, où la limitation n'existe pas. Le risque le plus grave du projet a disparu par un changement de scénario, pas par une solution technique.
 2. ~~**Whisper sur ton M4.**~~ ✅ **Mesuré le 2026-09-08 : 9,9×** — sous ma fourchette annoncée, au-dessus du seuil qui compte. Voir [§11.7](#117-mesures-réelles).
 3. **Test à l'aveugle du document final** — modèle local, Mistral Small 4, Haiku 4.5, Sonnet 5 — sur un vrai cours à toi, sans étiquettes. Tu choisis. « Le moins cher qui fait le taff » suppose de savoir lequel fait le taff, et ce n'est pas à moi d'en décider sur tes matières.
 

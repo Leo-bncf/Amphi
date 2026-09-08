@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Amphi — Studio</title>
+<style>
+  :root {
+    --bg: #fbfaf8;
+    --surface: #ffffff;
+    --line: #e6e2db;
+    --ink: #1c1a17;
+    --muted: #6f6a62;
+    --accent: #b4472c;
+    --accent-soft: #fdf0ec;
+    --ok: #2f6b4f;
+    --warn: #9a6b1e;
+    --radius: 10px;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161513;
+      --surface: #1f1e1b;
+      --line: #34322d;
+      --ink: #ece8e1;
+      --muted: #9b958a;
+      --accent: #e2704f;
+      --accent-soft: #2b201c;
+      --ok: #7fb99a;
+      --warn: #d3a45e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    border-bottom: 1px solid var(--line);
+    padding: 14px 22px;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 5;
+  }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: -0.01em; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .spacer { flex: 1; }
+  #engine { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 22px; display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+  .card h2 { margin: 0 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 600; }
+  .card .hint { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+  .full { grid-column: 1 / -1; }
+
+  button {
+    font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--surface); color: var(--ink); padding: 9px 15px; transition: background .12s, border-color .12s;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.primary:hover:not(:disabled) { filter: brightness(1.06); }
+
+  .recorder { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  #recBtn { width: 74px; height: 74px; border-radius: 50%; font-size: 26px; display: grid; place-items: center; padding: 0; flex: none; }
+  #recBtn.recording { background: var(--accent); border-color: var(--accent); color: #fff; animation: pulse 1.7s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(180,71,44,.42); } 50% { box-shadow: 0 0 0 13px rgba(180,71,44,0); } }
+  @media (prefers-reduced-motion: reduce) { #recBtn.recording { animation: none; } }
+
+  .meta { display: flex; flex-direction: column; gap: 6px; min-width: 190px; }
+  #timer { font-family: var(--mono); font-size: 28px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  #status { color: var(--muted); font-size: 13px; min-height: 1.4em; }
+
+  #levelWrap { flex: 1; min-width: 150px; height: 40px; display: flex; align-items: center; gap: 2px; }
+  .bar { flex: 1; background: var(--line); border-radius: 1px; height: 4px; transition: height .07s linear, background .07s linear; }
+
+  audio { width: 100%; margin-top: 14px; }
+
+  .seg { padding: 5px 8px; border-radius: 6px; display: flex; gap: 10px; align-items: baseline; }
+  .seg:hover { background: var(--accent-soft); }
+  .seg.playing { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+  .seg time { font-family: var(--mono); font-size: 12px; color: var(--accent); cursor: pointer; flex: none; font-variant-numeric: tabular-nums; }
+  .seg.low { border-left: 2px solid var(--warn); }
+  .scroll { max-height: 460px; overflow-y: auto; }
+
+  .notes h3 { font-size: 17px; margin: 20px 0 6px; }
+  .notes h4 { font-size: 15px; margin: 16px 0 4px; color: var(--muted); }
+  .notes p { margin: 6px 0; }
+  .notes ul { margin: 6px 0; padding-left: 20px; }
+  .notes .anchor { font-family: var(--mono); font-size: 11px; color: var(--accent); cursor: pointer; margin-left: 6px; opacity: .65; }
+  .notes .anchor:hover { opacity: 1; }
+  .notes .def { border-left: 2px solid var(--line); padding-left: 12px; margin: 10px 0; }
+  .notes .def b { color: var(--accent); }
+  .callout { border-radius: 8px; padding: 10px 13px; margin: 10px 0; border: 1px solid var(--line); }
+  .callout .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); display: block; margin-bottom: 3px; }
+  .callout.a-retenir { background: var(--accent-soft); border-color: var(--accent); }
+
+  .stats { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .empty { color: var(--muted); font-size: 14px; padding: 26px 0; text-align: center; }
+  .err { color: var(--accent); font-size: 13px; }
+  code { font-family: var(--mono); font-size: 12px; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Amphi</h1>
+  <span class="sub">studio local</span>
+  <span class="spacer"></span>
+  <span id="engine">connexion…</span>
+</header>
+
+<main>
+  <section class="card full">
+    <h2>Enregistrement</h2>
+    <p class="hint">Le micro du Mac. Tout reste sur cette machine : l'audio n'est envoyé nulle part.</p>
+    <div class="recorder">
+      <button id="recBtn" title="Démarrer l'enregistrement">●</button>
+      <div class="meta">
+        <span id="timer">00:00</span>
+        <span id="status">prêt</span>
+      </div>
+      <div id="levelWrap"></div>
+    </div>
+    <audio id="player" controls hidden></audio>
+  </section>
+
+  <section class="card">
+    <h2>Transcription</h2>
+    <p class="hint">Clique un horodatage pour sauter au passage. Les segments à faible confiance sont marqués.</p>
+    <div id="transcript" class="scroll"><div class="empty">Rien encore.</div></div>
+    <div class="stats" id="tStats" hidden></div>
+  </section>
+
+  <section class="card">
+    <h2>Notes</h2>
+    <p class="hint">Chaque bloc renvoie à un passage horodaté. Un bloc sans ancre valide est écarté, jamais affiché.</p>
+    <button id="notesBtn" class="primary" disabled>Générer les notes</button>
+    <div id="notes" class="notes scroll"><div class="empty">Transcris d'abord une séance.</div></div>
+  </section>
+</main>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const state = { rec: null, chunks: [], startedAt: 0, timer: null, segments: [], blobUrl: null };
+
+// ---- niveau audio ----
+const BARS = 28;
+const levelWrap = $("levelWrap");
+const bars = Array.from({ length: BARS }, () => {
+  const b = document.createElement("div");
+  b.className = "bar";
+  levelWrap.appendChild(b);
+  return b;
+});
+
+async function checkEngine() {
+  try {
+    const r = await fetch("/health");
+    const h = await r.json();
+    const battery = h.batteryPercent === null ? "secteur" : `${h.batteryPercent}%`;
+    $("engine").textContent = h.warm ? `${h.model.split("/").pop()} · ${battery}` : "modèle en chargement…";
+    if (!h.warm) setTimeout(checkEngine, 2000);
+  } catch {
+    $("engine").textContent = "serveur injoignable";
+  }
+}
+checkEngine();
+
+function fmt(ms) {
+  const s = Math.floor(ms / 1000);
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+$("recBtn").addEventListener("click", () => (state.rec ? stop() : start()));
+
+async function start() {
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true },
+    });
+  } catch (e) {
+    $("status").innerHTML = `<span class="err">micro refusé — autorise l'accès dans le navigateur</span>`;
+    return;
+  }
+
+  // Analyse du niveau : donne un retour visuel immédiat, et permet de voir tout
+  // de suite qu'on enregistre bien la salle et pas le silence.
+  const ctx = new AudioContext();
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
+  ctx.createMediaStreamSource(stream).connect(analyser);
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  const draw = () => {
+    if (!state.rec) { bars.forEach((b) => (b.style.height = "4px")); return; }
+    analyser.getByteFrequencyData(data);
+    const step = Math.floor(data.length / BARS);
+    bars.forEach((b, i) => {
+      const v = data[i * step] / 255;
+      b.style.height = `${4 + v * 34}px`;
+      b.style.background = v > 0.05 ? "var(--accent)" : "var(--line)";
+    });
+    requestAnimationFrame(draw);
+  };
+
+  const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/mp4";
+  state.chunks = [];
+  state.rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
+  state.rec.ondataavailable = (e) => e.data.size > 0 && state.chunks.push(e.data);
+  state.rec.onstop = () => {
+    stream.getTracks().forEach((t) => t.stop());
+    ctx.close();
+    transcribe(new Blob(state.chunks, { type: mime }), mime);
+  };
+  state.rec.start(1000);
+  state.startedAt = Date.now();
+  draw();
+
+  $("recBtn").classList.add("recording");
+  $("recBtn").textContent = "■";
+  $("status").textContent = "enregistrement…";
+  state.timer = setInterval(() => ($("timer").textContent = fmt(Date.now() - state.startedAt)), 250);
+}
+
+function stop() {
+  clearInterval(state.timer);
+  state.rec.stop();
+  state.rec = null;
+  $("recBtn").classList.remove("recording");
+  $("recBtn").textContent = "●";
+  $("status").textContent = "transcription en cours…";
+}
+
+async function transcribe(blob, mime) {
+  if (state.blobUrl) URL.revokeObjectURL(state.blobUrl);
+  state.blobUrl = URL.createObjectURL(blob);
+  const player = $("player");
+  player.src = state.blobUrl;
+  player.hidden = false;
+
+  const t0 = performance.now();
+  try {
+    const r = await fetch("/transcribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream", "X-Mime-Type": mime },
+      body: blob,
+    });
+    if (!r.ok) throw new Error((await r.json()).error ?? `HTTP ${r.status}`);
+    const result = await r.json();
+    state.segments = result.segments;
+    renderTranscript(result, (performance.now() - t0) / 1000);
+    $("notesBtn").disabled = state.segments.length === 0;
+    $("status").textContent = "prêt";
+  } catch (e) {
+    $("status").innerHTML = `<span class="err">${e.message}</span>`;
+  }
+}
+
+function renderTranscript(result, wallSeconds) {
+  const host = $("transcript");
+  host.innerHTML = "";
+  if (result.segments.length === 0) {
+    host.innerHTML = `<div class="empty">Aucune parole détectée.</div>`;
+    return;
+  }
+  for (const [i, seg] of result.segments.entries()) {
+    const div = document.createElement("div");
+    div.className = "seg" + (seg.avgConfidence < 0.6 ? " low" : "");
+    div.dataset.start = seg.startMs;
+    div.dataset.end = seg.endMs;
+    div.innerHTML = `<time title="confiance ${(seg.avgConfidence * 100).toFixed(0)} %">${fmt(seg.startMs)}</time><span>${escapeHtml(seg.text)}</span>`;
+    div.querySelector("time").addEventListener("click", () => seek(seg.startMs));
+    host.appendChild(div);
+  }
+
+  const audioS = result.audioDurationMs / 1000;
+  const rtf = audioS / (result.processingMs / 1000);
+  $("tStats").hidden = false;
+  $("tStats").innerHTML = `
+    <span>durée <b>${fmt(result.audioDurationMs)}</b></span>
+    <span>segments <b>${result.segments.length}</b></span>
+    <span>langue <b>${result.segments[0]?.lang ?? "?"}</b></span>
+    <span>transcrit en <b>${wallSeconds.toFixed(1)} s</b></span>
+    <span>soit <b>${rtf.toFixed(1)}×</b> le temps réel</span>
+    <span>coût <b>0,00 €</b></span>`;
+}
+
+function seek(ms) {
+  const p = $("player");
+  p.currentTime = ms / 1000;
+  p.play();
+}
+
+$("player").addEventListener("timeupdate", () => {
+  const ms = $("player").currentTime * 1000;
+  for (const el of document.querySelectorAll(".seg")) {
+    el.classList.toggle("playing", ms >= +el.dataset.start && ms < +el.dataset.end);
+  }
+});
+
+// ---- notes ----
+$("notesBtn").addEventListener("click", async () => {
+  const btn = $("notesBtn");
+  btn.disabled = true;
+  btn.textContent = "génération…";
+  try {
+    const r = await fetch("/notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ segments: state.segments }),
+    });
+    const payload = await r.json();
+    if (!r.ok) throw new Error(payload.error ?? `HTTP ${r.status}`);
+    renderNotes(payload);
+  } catch (e) {
+    $("notes").innerHTML = `<div class="empty err">${escapeHtml(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Générer les notes";
+  }
+});
+
+function anchorEl(anchor) {
+  if (!anchor) return "";
+  return `<span class="anchor" data-ms="${anchor.startMs}">↩ ${fmt(anchor.startMs)}</span>`;
+}
+
+function renderNotes(doc) {
+  const host = $("notes");
+  const parts = [`<h3>${escapeHtml(doc.title)}</h3>`, `<p>${escapeHtml(doc.summary)}</p>`];
+
+  for (const b of doc.blocks) {
+    const a = anchorEl(b.anchor);
+    if (b.type === "heading") parts.push(`<h4>${escapeHtml(b.text)}${a}</h4>`);
+    else if (b.type === "paragraph") parts.push(`<p>${escapeHtml(b.text)}${a}</p>`);
+    else if (b.type === "bullets")
+      parts.push(`<ul>${b.items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>${a}`);
+    else if (b.type === "definition")
+      parts.push(`<div class="def"><b>${escapeHtml(b.term)}</b> — ${escapeHtml(b.definition)}${a}</div>`);
+    else if (b.type === "callout")
+      parts.push(`<div class="callout ${b.kind}"><span class="lbl">${b.kind.replace("-", " ")}</span>${escapeHtml(b.text)}${a}</div>`);
+  }
+
+  if (doc.glossary?.length) {
+    parts.push(`<h4>Glossaire</h4>`);
+    for (const g of doc.glossary) parts.push(`<div class="def"><b>${escapeHtml(g.term)}</b> — ${escapeHtml(g.definition)}${anchorEl(g.anchor)}</div>`);
+  }
+  if (doc.rejectedBlocks > 0) {
+    parts.push(`<p class="err">${doc.rejectedBlocks} bloc(s) écarté(s) : ancre vers la transcription invalide.</p>`);
+  }
+  parts.push(`<div class="stats"><span>modèle <b>${escapeHtml(doc.model)}</b></span><span>coût <b>${doc.costEuros}</b></span><span>en <b>${(doc.latencyMs / 1000).toFixed(1)} s</b></span></div>`);
+
+  host.innerHTML = parts.join("");
+  for (const el of host.querySelectorAll(".anchor")) el.addEventListener("click", () => seek(+el.dataset.ms));
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+}
+</script>
+</body>
+</html>
