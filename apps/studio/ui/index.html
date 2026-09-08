@@ -309,8 +309,13 @@ audio { width: 100%; margin-top: var(--s-sm); }
 
 /* Rail à gauche, colonne de lecture à droite : la structure vient du rail, pas
    de numéros posés dans la marge du texte. */
-.sheetGrid { display: grid; grid-template-columns: 224px minmax(0, 1fr); align-items: start; }
-@media (max-width: 1100px) { .sheetGrid { grid-template-columns: 1fr; } }
+/* Le papier occupe toute la largeur ; la colonne de lecture reste centrée et
+   bornée. Une ligne de 1 400 px ne se lit pas — l'œil perd la ligne suivante —
+   et une colonne calée à gauche dans un grand vide se voit tout autant. */
+.sheetGrid { display: grid; grid-template-columns: 224px minmax(0, 74ch);
+             justify-content: center; align-items: start; }
+@media (max-width: 1100px) { .sheetGrid { grid-template-columns: minmax(0, 74ch);
+                                          justify-content: center; } }
 .rail { position: sticky; top: 70px; padding: var(--s-lg) var(--s-md) var(--s-xl) var(--s-lg);
         border-right: 1px solid var(--hair); font-family: var(--font-display); font-size: var(--t-sm); }
 @media (max-width: 1100px) { .rail { display: none; } }
@@ -323,12 +328,13 @@ audio { width: 100%; margin-top: var(--s-sm); }
 .rail .meta { margin-top: var(--s-md); padding-top: var(--s-sm); border-top: 1px solid var(--hair);
               color: var(--neutral); font-size: var(--t-xs); display: grid; gap: 3px;
               font-family: var(--font-data); }
-.sheetInner { padding: var(--s-xl) var(--s-xl) var(--s-2xl); max-width: 78ch; }
+.sheetInner { padding: var(--s-xl) var(--s-xl) var(--s-2xl); min-width: 0; }
 @media (max-width: 700px) { .sheetInner { padding: var(--s-lg) var(--s-md) var(--s-xl); } }
 
 /* Couverture biaisée à gauche ; l'eyebrow sort de l'axe, à droite du titre. */
 .cover { display: grid; gap: var(--s-sm); padding-bottom: var(--s-lg); margin-bottom: var(--s-xl);
          border-bottom: 2px solid var(--ink); }
+.cover .docmeta { display: none; }   /* déjà dans le rail, inutile en double */
 .cover .kicker { justify-self: end; font-family: var(--font-data); font-size: var(--t-xs);
                  letter-spacing: .18em; text-transform: uppercase; color: var(--accent); }
 .cover .doctitle { font-family: var(--font-display); font-size: var(--t-2xl); line-height: 1.04;
@@ -447,6 +453,7 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
   #sheet { border: 0; background: #fff; }
   .sheetGrid { display: block; }
   .sheetInner { padding: 0; max-width: none; }
+  .cover .docmeta { display: flex; }
   .cover { border-bottom: 1.5pt solid #111; }
   .cover .doctitle { font-size: 21pt; }
   .sec { break-after: avoid; border-top: 1pt solid #111; }
@@ -1145,13 +1152,13 @@ function renderSheet() {
     .join("");
 
   const parts = [
-    `<div class="cover"><div class="kicker">Notes de cours${d.language ? " · " + esc(d.language.toUpperCase()) : ""}</div>
-       <h1 class="doctitle blk" contenteditable="true" data-i="title">${esc(d.title)}</h1>
-       <div class="docmeta">${meta.map((m) => `<span>${esc(m)}</span>`).join("")}</div></div>`,
     `<div class="sheetGrid"><nav class="rail noprint">`,
     toc ? `<div class="tt">Sommaire</div>${toc}` : "",
     `<div class="meta">${meta.map((m) => `<span>${esc(m)}</span>`).join("")}</div>`,
     `</nav><div class="sheetInner">`,
+    `<div class="cover"><div class="kicker">Notes de cours${d.language ? " · " + esc(d.language.toUpperCase()) : ""}</div>
+       <h1 class="doctitle blk" contenteditable="true" data-i="title">${esc(d.title)}</h1>
+       <div class="docmeta">${meta.map((m) => `<span>${esc(m)}</span>`).join("")}</div></div>`,
     `<p class="lede blk" contenteditable="true" data-i="summary">${esc(d.summary)}</p>`,
     ...body,
     `<div id="imgHost"></div>`,
