@@ -1,0 +1,28 @@
+{
+  "name": "@amphi/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "node --watch --experimental-strip-types src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@amphi/db": "workspace:*",
+    "@amphi/providers": "workspace:*",
+    "@amphi/shared": "workspace:*",
+    "bullmq": "^5.34.0",
+    "drizzle-orm": "^0.44.0",
+    "fastify": "^5.2.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

@@ -27,7 +27,7 @@ M1 s'ouvre sur trois mesures, avant toute fonctionnalité, parce qu'elles peuven
 
 - **Node ≥ 24** et **pnpm ≥ 12** (`npm i -g pnpm`)
 - **Python 3.11+** pour le banc de mesure (`/usr/bin/python3` convient)
-- Docker, uniquement pour Postgres et Redis en local
+- **Docker** pour Postgres et Redis en local — ⚠️ pas installé sur cette machine, à poser avant de lancer l'API (Docker Desktop ou OrbStack)
 
 Aucun Homebrew requis : le worker ASR passe par MLX, qui s'installe avec pip et n'a rien à compiler.
 

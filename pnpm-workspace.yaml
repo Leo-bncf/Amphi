@@ -5,3 +5,7 @@ packages:
 # esbuild est une dépendance de vitest et a besoin de son script postinstall
 allowBuilds:
   esbuild: true
+  # Accélérateur natif optionnel de msgpackr (BullMQ). msgpackr retombe sur du JS
+  # pur sans lui, et à quelques chunks par minute la différence est nulle. On
+  # évite une compilation native pour que l'install marche sur n'importe quel Mac.
+  msgpackr-extract: false
