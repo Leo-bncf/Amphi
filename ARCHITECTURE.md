@@ -508,6 +508,19 @@ Le vrai coût est ailleurs : 130 h de cours à 3 flux font **390 h d'audio par m
 
 Second résultat, inattendu : les horodatages au mot sont **gratuits**. Je m'attendais à ce qu'ils coûtent cher, puisqu'ils demandent une passe d'alignement supplémentaire. On les active donc partout — le module de consensus et l'ancrage des notes en dépendent tous les deux.
 
+#### Sections creuses, compléments, schémas — retour d'usage du 2026-09-08
+
+Premier vrai test par Leo. Quatre défauts trouvés, tous corrigés :
+
+| Constat | Correctif |
+|---|---|
+| Un cours où l'enseignant annonce « Introduction au CPU et à la RAM » sans rien développer produisait un plan de rubriques vides | **Contrôle structurel** `drop_hollow_headings` : un titre suivi d'un autre titre, ou en dernière position, est supprimé. Une consigne de prompt ne suffisait pas — le modèle la contourne dès qu'il croit devoir remplir. Résultat mesuré : **0 bloc** pour ce cours, au lieu d'un squelette trompeur. |
+| « Des questions ? » devenait un encadré | Le bruit administratif est nommé explicitement dans le prompt. Pas de filtre structurel ici : un seuil sur la longueur supprimerait aussi « Standardiser AVANT ! », qui est du vrai contenu. |
+| Rien pour combler un cours trop maigre | **Blocs `enrichment`, opt-in.** Ils n'ont volontairement **pas d'ancre** — ils ne viennent pas du cours. Ils sont affichés à part, encadrés en pointillés, avec la mention « hors cours ». La garantie devient : *tout est soit ancré au cours, soit signalé comme extérieur*. Sur le cours vide, deux compléments pertinents sur le CPU et la RAM. |
+| Un schéma intitulé « Choix entre Ridge, Lasso et Elastic Net » qui était en réalité une chaîne linéaire de 17 nœuds | Prompt resserré : **6 à 12 nœuds**, le titre doit décrire ce que le schéma montre réellement, et **le modèle peut refuser** de produire un schéma quand le passage ne s'y prête pas. Vérifié : refus argumenté sur une énumération, et 8 nœuds avec une vraie ramification sur le contenu qui s'y prête. |
+
+*Le piège du filtre structurel :* il est tentant de supprimer aussi les blocs « trop courts ». C'est ce qui détruirait « Standardiser AVANT ! » — l'avertissement le plus important du cours testé. Les garde-fous déterministes ne sont posés que là où ils ne peuvent pas supprimer de contenu réel ; le reste passe par le prompt, qui échoue plus doucement.
+
 #### Documents et schémas — mesuré
 
 | Fonction | Mesure |

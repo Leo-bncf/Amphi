@@ -6,226 +6,376 @@
 <title>Amphi — Studio</title>
 <style>
   :root {
-    --bg: #fbfaf8; --surface: #fff; --line: #e6e2db; --ink: #1c1a17; --muted: #6f6a62;
-    --accent: #b4472c; --accent-soft: #fdf0ec; --edit: #2f6b4f; --edit-soft: #eef5f1;
-    --warn: #9a6b1e; --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --bg: #f4f2ee; --paper: #fffdfa; --surface: #fff; --line: #e2ddd4; --line-soft: #efebe3;
+    --ink: #1b1916; --ink-soft: #46423c; --muted: #7a746a;
+    --accent: #a63f24; --accent-soft: #fbeee9;
+    --edit: #2c6349; --edit-soft: #eaf3ee;
+    --add: #4a4d8f; --add-soft: #eeeef8;
+    --warn: #8d6212;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #161513; --surface: #1f1e1b; --line: #34322d; --ink: #ece8e1; --muted: #9b958a;
-      --accent: #e2704f; --accent-soft: #2b201c; --edit: #7fb99a; --edit-soft: #1c2621; --warn: #d3a45e;
+      --bg: #14130f; --paper: #1c1b17; --surface: #211f1b; --line: #35322b; --line-soft: #2a2823;
+      --ink: #ece7dd; --ink-soft: #c8c2b6; --muted: #948d80;
+      --accent: #e0764f; --accent-soft: #2a1e18;
+      --edit: #7cba98; --edit-soft: #17241d;
+      --add: #9a9de0; --add-soft: #1d1d2b; --warn: #d0a659;
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink);
-         font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-  header { border-bottom: 1px solid var(--line); padding: 13px 22px; display: flex;
-           align-items: baseline; gap: 14px; position: sticky; top: 0; background: var(--bg); z-index: 20; }
-  header h1 { font-size: 16px; margin: 0; }
-  header .sub, #engine { color: var(--muted); font-size: 13px; }
-  #engine { font-family: var(--mono); font-size: 12px; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--sans); }
+
+  header { border-bottom: 1px solid var(--line); padding: 11px 20px; display: flex; align-items: center;
+           gap: 12px; position: sticky; top: 0; background: var(--bg); z-index: 30; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+  .tabs { display: flex; gap: 3px; background: var(--line-soft); padding: 3px; border-radius: 8px; }
+  .tabs button { border: 0; background: transparent; padding: 5px 13px; border-radius: 6px;
+                 font-size: 13px; color: var(--muted); cursor: pointer; }
+  .tabs button.on { background: var(--surface); color: var(--ink); font-weight: 600;
+                    box-shadow: 0 1px 2px rgba(0,0,0,.07); }
   header .spacer { flex: 1; }
+  #saveState { color: var(--edit); font-size: 12px; }
+  #engine { color: var(--muted); font-size: 11px; font-family: var(--mono); }
 
-  main { max-width: 1400px; margin: 0 auto; padding: 20px; display: grid; gap: 16px;
-         grid-template-columns: 1fr 1fr; align-items: start; }
-  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  main { max-width: 1360px; margin: 0 auto; padding: 18px 20px 60px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; align-items: start; }
+  @media (max-width: 1040px) { .grid { grid-template-columns: 1fr; } }
   .full { grid-column: 1 / -1; }
+  .hidden { display: none !important; }
 
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
-  .card h2 { margin: 0 0 3px; font-size: 12px; text-transform: uppercase; letter-spacing: .07em;
-             color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 8px; }
-  .card .hint { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 15px; }
+  .card h2 { margin: 0 0 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+             color: var(--muted); font-weight: 700; }
+  .card .hint { color: var(--muted); font-size: 12.5px; margin: 0 0 11px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
   button { font: inherit; cursor: pointer; border-radius: 7px; border: 1px solid var(--line);
-           background: var(--surface); color: var(--ink); padding: 7px 13px; }
+           background: var(--surface); color: var(--ink); padding: 6px 12px; }
   button:hover:not(:disabled) { border-color: var(--accent); }
-  button:disabled { opacity: .4; cursor: not-allowed; }
+  button:disabled { opacity: .38; cursor: not-allowed; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
   button.sm { padding: 4px 9px; font-size: 12px; }
+  button.ghost { border-color: transparent; color: var(--muted); }
+  label.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+                 color: var(--muted); cursor: pointer; }
 
-  #recBtn { width: 68px; height: 68px; border-radius: 50%; font-size: 24px; padding: 0; flex: none;
+  /* ---------------- bibliothèque ---------------- */
+  .lib { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .doc { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 15px;
+         cursor: pointer; transition: border-color .12s, transform .12s; position: relative; }
+  .doc:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .doc h3 { margin: 0 0 6px; font-size: 15.5px; font-family: var(--serif); line-height: 1.3; }
+  .doc .meta { font-size: 12px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
+  .doc .del { position: absolute; top: 9px; right: 9px; opacity: 0; }
+  .doc:hover .del { opacity: 1; }
+
+  /* ---------------- capture ---------------- */
+  #recBtn { width: 62px; height: 62px; border-radius: 50%; font-size: 22px; padding: 0; flex: none;
             display: grid; place-items: center; }
   #recBtn.recording { background: var(--accent); border-color: var(--accent); color: #fff;
                       animation: pulse 1.7s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(180,71,44,.4); } 50% { box-shadow: 0 0 0 12px rgba(180,71,44,0); } }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(166,63,36,.4); } 50% { box-shadow: 0 0 0 12px rgba(166,63,36,0); } }
   @media (prefers-reduced-motion: reduce) { #recBtn.recording { animation: none; } }
-  #timer { font-family: var(--mono); font-size: 26px; font-variant-numeric: tabular-nums; }
-  #status { color: var(--muted); font-size: 13px; min-height: 1.4em; }
-  #levelWrap { flex: 1; min-width: 130px; height: 38px; display: flex; align-items: center; gap: 2px; }
+  #timer { font-family: var(--mono); font-size: 24px; font-variant-numeric: tabular-nums; }
+  #status { color: var(--muted); font-size: 12.5px; min-height: 1.4em; }
+  #levelWrap { flex: 1; min-width: 120px; height: 34px; display: flex; align-items: center; gap: 2px; }
   .bar { flex: 1; background: var(--line); border-radius: 1px; height: 4px; transition: height .07s linear; }
-  audio { width: 100%; margin-top: 12px; }
+  audio { width: 100%; margin-top: 10px; }
 
-  .scroll { max-height: 420px; overflow-y: auto; }
-  .seg { padding: 4px 7px; border-radius: 5px; display: flex; gap: 9px; align-items: baseline; }
+  .scroll { max-height: 380px; overflow-y: auto; }
+  .seg { padding: 3px 6px; border-radius: 5px; display: flex; gap: 9px; align-items: baseline; font-size: 14px; }
   .seg:hover { background: var(--accent-soft); }
   .seg.playing { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
-  .seg time { font-family: var(--mono); font-size: 12px; color: var(--accent); cursor: pointer;
+  .seg time { font-family: var(--mono); font-size: 11.5px; color: var(--accent); cursor: pointer;
               flex: none; font-variant-numeric: tabular-nums; }
   .seg.low { border-left: 2px solid var(--warn); }
 
-  #drop { border: 1.5px dashed var(--line); border-radius: 9px; padding: 18px; text-align: center;
-          color: var(--muted); font-size: 13px; cursor: pointer; transition: border-color .15s, background .15s; }
+  #drop { border: 1.5px dashed var(--line); border-radius: 9px; padding: 16px; text-align: center;
+          color: var(--muted); font-size: 12.5px; cursor: pointer; }
   #drop.over { border-color: var(--accent); background: var(--accent-soft); }
-  .att { border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; margin-top: 9px; }
-  .att .top { display: flex; gap: 8px; align-items: center; font-size: 13px; }
-  .att .top b { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .att .tag { font-size: 11px; font-family: var(--mono); color: var(--muted); }
-  .att pre { margin: 8px 0 0; font-size: 12px; white-space: pre-wrap; max-height: 130px;
+  .att { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
+  .att .top { display: flex; gap: 8px; align-items: center; font-size: 12.5px; }
+  .att .top b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .att .tag { font-size: 10.5px; font-family: var(--mono); color: var(--muted); }
+  .att pre { margin: 7px 0 0; font-size: 11.5px; white-space: pre-wrap; max-height: 110px;
              overflow-y: auto; color: var(--muted); font-family: var(--mono); }
-  .att img { max-width: 100%; border-radius: 6px; margin-top: 8px; }
+  .att img { max-width: 100%; border-radius: 6px; margin-top: 7px; }
 
-  .notes h3 { font-size: 17px; margin: 4px 0 6px; }
-  .notes h4 { font-size: 15px; margin: 15px 0 3px; color: var(--muted); }
-  .notes p, .notes li { margin: 5px 0; }
-  .blk { border-radius: 6px; padding: 3px 7px; margin: 2px -7px; position: relative; }
-  .blk:hover { background: var(--accent-soft); }
-  .blk[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; background: var(--surface); }
-  .blk.edited { border-left: 2px solid var(--edit); background: var(--edit-soft); }
-  .blk.edited::after { content: "modifié"; font-size: 10px; color: var(--edit); text-transform: uppercase;
-                       letter-spacing: .06em; margin-left: 8px; vertical-align: super; }
-  .anchor { font-family: var(--mono); font-size: 11px; color: var(--accent); cursor: pointer;
-            margin-left: 6px; opacity: .6; user-select: none; }
+  /* ---------------- la feuille de notes ---------------- */
+  #sheet { background: var(--paper); border: 1px solid var(--line); border-radius: 12px;
+           padding: 44px 52px 52px; font-family: var(--serif); font-size: 16.5px; line-height: 1.68;
+           color: var(--ink-soft); max-width: 78ch; margin: 0 auto; }
+  @media (max-width: 700px) { #sheet { padding: 26px 22px; } }
+  #sheet .doctitle { font-size: 27px; line-height: 1.2; margin: 0 0 4px; color: var(--ink);
+                     font-weight: 600; letter-spacing: -0.015em; text-wrap: balance; }
+  #sheet .docmeta { font-family: var(--sans); font-size: 12px; color: var(--muted);
+                    padding-bottom: 18px; border-bottom: 1px solid var(--line-soft); margin-bottom: 22px; }
+  #sheet .lede { font-size: 17px; color: var(--ink); margin: 0 0 26px; }
+  #sheet h2 { font-size: 20px; margin: 32px 0 8px; color: var(--ink); font-weight: 600;
+              letter-spacing: -0.01em; text-wrap: balance; }
+  #sheet h3 { font-size: 17px; margin: 22px 0 5px; color: var(--ink); font-weight: 600; }
+  #sheet p { margin: 11px 0; }
+  #sheet ul { margin: 11px 0; padding-left: 22px; }
+  #sheet li { margin: 4px 0; }
+
+  .blk { border-radius: 5px; padding: 2px 6px; margin-left: -6px; margin-right: -6px; }
+  .blk[contenteditable="true"]:hover { background: var(--accent-soft); }
+  .blk[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-offset: 2px;
+                                        background: var(--surface); }
+  .blk.edited { box-shadow: inset 3px 0 0 var(--edit); background: var(--edit-soft); }
+
+  .anchor { font-family: var(--mono); font-size: 10.5px; color: var(--accent); cursor: pointer;
+            opacity: .55; user-select: none; vertical-align: super; margin-left: 4px; }
   .anchor:hover { opacity: 1; }
   .anchor.att { color: var(--muted); cursor: default; }
-  .def { border-left: 2px solid var(--line); padding-left: 11px; }
-  .def b { color: var(--accent); }
-  .callout { border-radius: 7px; padding: 9px 12px; border: 1px solid var(--line); }
-  .callout .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
-                  color: var(--muted); display: block; margin-bottom: 2px; }
-  .callout.a-retenir { background: var(--accent-soft); border-color: var(--accent); }
 
-  .diagram { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-top: 12px; }
-  .diagram .render { overflow-x: auto; text-align: center; padding: 6px 0; }
-  .diagram textarea { width: 100%; font-family: var(--mono); font-size: 12px; border: 1px solid var(--line);
+  .def { margin: 16px 0; padding: 2px 0 2px 16px; border-left: 3px solid var(--accent); }
+  .def .term { font-weight: 700; color: var(--ink); }
+  .callout { margin: 18px 0; padding: 13px 16px; border-radius: 8px; background: var(--surface);
+             border: 1px solid var(--line); }
+  .callout .lbl { font-family: var(--sans); font-size: 10px; font-weight: 700; text-transform: uppercase;
+                  letter-spacing: .1em; display: block; margin-bottom: 5px; color: var(--muted); }
+  .callout.a-retenir { background: var(--accent-soft); border-color: var(--accent); }
+  .callout.a-retenir .lbl { color: var(--accent); }
+  .callout.attention { border-left: 3px solid var(--warn); }
+  .callout.attention .lbl { color: var(--warn); }
+
+  .enrich { margin: 18px 0; padding: 13px 16px; border-radius: 8px; background: var(--add-soft);
+            border: 1px dashed var(--add); }
+  .enrich .lbl { font-family: var(--sans); font-size: 10px; font-weight: 700; text-transform: uppercase;
+                 letter-spacing: .1em; color: var(--add); display: block; margin-bottom: 5px; }
+  .enrich .why { font-family: var(--sans); font-size: 12px; color: var(--muted); margin-top: 7px; }
+
+  .gloss { margin-top: 34px; padding-top: 20px; border-top: 1px solid var(--line-soft); }
+  .gloss dt { font-weight: 700; color: var(--ink); margin-top: 11px; }
+  .gloss dd { margin: 2px 0 0; padding-left: 0; }
+
+  .diagram { margin: 22px 0; padding: 14px; border: 1px solid var(--line); border-radius: 9px;
+             background: var(--surface); }
+  .diagram h4 { font-family: var(--sans); font-size: 13px; margin: 0 0 3px; color: var(--ink); }
+  .diagram .cap { font-family: var(--sans); font-size: 12px; color: var(--muted); margin: 0 0 9px; }
+  .diagram .render { overflow-x: auto; text-align: center; }
+  .diagram textarea { width: 100%; font-family: var(--mono); font-size: 11.5px; border: 1px solid var(--line);
                       border-radius: 6px; padding: 8px; background: var(--bg); color: var(--ink);
                       min-height: 90px; resize: vertical; }
-  .diagram .cap { font-size: 12px; color: var(--muted); margin: 6px 0; }
 
-  .stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--muted);
-           margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--line); }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; font-family: var(--sans); font-size: 11.5px;
+           color: var(--muted); margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); }
   .stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
-  .empty { color: var(--muted); font-size: 14px; padding: 22px 0; text-align: center; }
+  .empty { color: var(--muted); font-size: 14px; padding: 30px 0; text-align: center; font-family: var(--sans); }
   .err { color: var(--accent); font-size: 13px; }
-  .ok { color: var(--edit); font-size: 12px; }
+
+  /* ---------------- impression ---------------- */
+  @media print {
+    @page { margin: 17mm 16mm; }
+    header, .noprint, #transcriptCard, #docsCard, #recCard, .anchor, .del, button { display: none !important; }
+    body { background: #fff; color: #000; font-size: 11pt; }
+    main { max-width: none; padding: 0; }
+    #sheet { border: 0; padding: 0; max-width: none; background: #fff; color: #000; box-shadow: none; }
+    #sheet .doctitle { font-size: 21pt; }
+    #sheet h2 { font-size: 14pt; margin-top: 18pt; break-after: avoid; }
+    #sheet h3 { font-size: 12pt; break-after: avoid; }
+    .blk, .def, .callout, .enrich, .diagram { break-inside: avoid; box-shadow: none; }
+    .callout, .enrich { border: 1px solid #999; background: #fff; }
+    .enrich { border-style: dashed; }
+    .def { border-left: 2px solid #666; }
+    .stats { display: none; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>Amphi</h1><span class="sub">studio local</span>
+  <h1>Amphi</h1>
+  <div class="tabs">
+    <button id="tabLib" class="on">Bibliothèque</button>
+    <button id="tabSes">Séance</button>
+  </div>
   <span class="spacer"></span>
-  <span id="saveState" class="ok"></span>
+  <span id="saveState"></span>
   <span id="engine">connexion…</span>
 </header>
 
 <main>
-  <section class="card full">
-    <h2>Enregistrement</h2>
-    <div class="row" style="gap:15px">
-      <button id="recBtn" title="Enregistrer">●</button>
-      <div style="display:flex;flex-direction:column;gap:5px;min-width:180px">
-        <span id="timer">00:00</span><span id="status">prêt</span>
+  <!-- ============ BIBLIOTHÈQUE ============ -->
+  <section id="viewLib">
+    <div class="row" style="margin-bottom:14px">
+      <button class="primary" id="newBtn">Nouvelle séance</button>
+      <span class="hint" style="margin:0">Tes séances enregistrées. Clique pour rouvrir, relire, imprimer.</span>
+    </div>
+    <div id="lib" class="lib"></div>
+  </section>
+
+  <!-- ============ SÉANCE ============ -->
+  <section id="viewSes" class="hidden">
+    <div class="grid">
+      <div class="card full noprint" id="recCard">
+        <h2>Enregistrement</h2>
+        <div class="row" style="gap:14px">
+          <button id="recBtn" title="Enregistrer">●</button>
+          <div style="display:flex;flex-direction:column;gap:4px;min-width:170px">
+            <span id="timer">00:00</span><span id="status">prêt</span>
+          </div>
+          <div id="levelWrap"></div>
+          <input id="docTitle" placeholder="Nom de la séance" style="font:inherit;padding:7px 11px;
+                 border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);min-width:210px" />
+        </div>
+        <audio id="player" controls hidden></audio>
       </div>
-      <div id="levelWrap"></div>
-    </div>
-    <audio id="player" controls hidden></audio>
-  </section>
 
-  <section class="card">
-    <h2>Transcription</h2>
-    <p class="hint">Clique un horodatage pour sauter au passage.</p>
-    <div id="transcript" class="scroll"><div class="empty">Rien encore.</div></div>
-    <div class="stats" id="tStats" hidden></div>
-  </section>
+      <div class="card noprint" id="transcriptCard">
+        <h2>Transcription</h2>
+        <p class="hint">Clique un horodatage pour sauter au passage.</p>
+        <div id="transcript" class="scroll"><div class="empty">Rien encore.</div></div>
+        <div class="stats" id="tStats" hidden></div>
+      </div>
 
-  <section class="card">
-    <h2>Documents</h2>
-    <p class="hint">Photo du tableau, diapositive, ou texte collé. Le contenu devient une source citable par les notes.</p>
-    <div id="drop">Dépose une image ou un fichier texte — ou clique pour choisir</div>
-    <input type="file" id="fileInput" accept="image/*,.txt,.md" multiple hidden />
-    <div class="row" style="margin-top:9px">
-      <button class="sm" id="pasteBtn">Coller du texte</button>
-    </div>
-    <div id="attachments"></div>
-  </section>
+      <div class="card noprint" id="docsCard">
+        <h2>Documents</h2>
+        <p class="hint">Photo du tableau, diapositive, texte collé. Le contenu devient une source citable.</p>
+        <div id="drop">Dépose une image ou un fichier texte — ou clique pour choisir</div>
+        <input type="file" id="fileInput" accept="image/*,.txt,.md" multiple hidden />
+        <div class="row" style="margin-top:8px"><button class="sm" id="pasteBtn">Coller du texte</button></div>
+        <div id="attachments"></div>
+      </div>
 
-  <section class="card full">
-    <h2>Notes <span id="editHint" class="tag" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
-    <p class="hint">Chaque bloc est modifiable — clique dedans et écris. Ce que tu modifies est conservé lors d'une régénération, jamais écrasé.</p>
-    <div class="row" style="margin-bottom:12px">
-      <button id="notesBtn" class="primary" disabled>Générer les notes</button>
-      <button id="diagBtn" disabled>Faire un schéma</button>
-      <button id="saveBtn" class="sm" disabled>Enregistrer</button>
-      <span id="notesErr" class="err"></span>
+      <div class="full">
+        <div class="row noprint" style="margin-bottom:14px">
+          <button id="notesBtn" class="primary" disabled>Générer les notes</button>
+          <label class="toggle"><input type="checkbox" id="enrichChk" /> compléter les prérequis manquants</label>
+          <button id="diagBtn" disabled>Faire un schéma</button>
+          <span style="flex:1"></span>
+          <button id="mdBtn" class="sm" disabled>Markdown</button>
+          <button id="printBtn" class="sm" disabled>Imprimer / PDF</button>
+          <button id="saveBtn" class="sm" disabled>Enregistrer</button>
+        </div>
+        <div class="err noprint" id="notesErr" style="margin-bottom:10px"></div>
+        <div id="sheet"><div class="empty">Enregistre une séance ou dépose un document, puis génère les notes.</div></div>
+      </div>
     </div>
-    <div id="notes" class="notes"><div class="empty">Transcris une séance ou dépose un document.</div></div>
-    <div id="diagrams"></div>
   </section>
 </main>
 
-<!-- build UMD : pose globalThis.mermaid, ce n'est pas un module ES -->
 <script src="/vendor/mermaid.min.js"></script>
 <script type="module">
 const mermaid = globalThis.mermaid;
-
 const $ = (id) => document.getElementById(id);
 const dark = matchMedia("(prefers-color-scheme: dark)").matches;
 mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "neutral", securityLevel: "strict" });
 
-const state = {
-  rec: null, chunks: [], startedAt: 0, timer: null,
-  segments: [], attachments: [], doc: null, diagrams: [], blobUrl: null, dirty: false,
-};
+const state = { id: null, title: "", rec: null, chunks: [], startedAt: 0, timer: null,
+                segments: [], attachments: [], doc: null, diagrams: [], blobUrl: null, dirty: false };
 
-const fmt = (ms) => {
-  const s = Math.floor(ms / 1000);
-  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-};
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmt = (ms) => { const s = Math.floor(ms / 1000);
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const slug = (s) => (s || "seance").normalize("NFD").replace(/[̀-ͯ]/g, "")
+  .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "seance";
 
-// ------------------------------------------------------------------ moteur
+// ---------------------------------------------------------------- vues
+function show(view) {
+  $("viewLib").classList.toggle("hidden", view !== "lib");
+  $("viewSes").classList.toggle("hidden", view !== "ses");
+  $("tabLib").classList.toggle("on", view === "lib");
+  $("tabSes").classList.toggle("on", view === "ses");
+  if (view === "lib") loadLibrary();
+}
+$("tabLib").onclick = () => show("lib");
+$("tabSes").onclick = () => show("ses");
+
 async function checkEngine() {
   try {
     const h = await (await fetch("/health")).json();
-    const batt = h.batteryPercent === null ? "secteur" : `${h.batteryPercent}%`;
-    $("engine").textContent = h.warm ? `${h.model.split("/").pop()} · ${batt}` : "chargement du modèle…";
+    $("engine").textContent = h.warm
+      ? `${h.model.split("/").pop()} · ${h.batteryPercent === null ? "secteur" : h.batteryPercent + "%"}`
+      : "chargement du modèle…";
     if (!h.warm) setTimeout(checkEngine, 2000);
   } catch { $("engine").textContent = "serveur injoignable"; }
 }
 checkEngine();
 
-// --------------------------------------------------------------- niveau audio
-const BARS = 26;
-const bars = Array.from({ length: BARS }, () => {
-  const b = document.createElement("div"); b.className = "bar";
-  $("levelWrap").appendChild(b); return b;
-});
+// ---------------------------------------------------------- bibliothèque
+async function loadLibrary() {
+  const { docs } = await (await fetch("/docs")).json();
+  const host = $("lib");
+  if (!docs.length) { host.innerHTML = `<div class="empty">Aucune séance enregistrée pour l'instant.</div>`; return; }
+  host.innerHTML = "";
+  for (const d of docs) {
+    const card = document.createElement("article");
+    card.className = "doc";
+    const when = d.savedAt ? new Date(d.savedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "";
+    card.innerHTML = `<button class="sm ghost del" title="Supprimer">✕</button>
+      <h3>${esc(d.title)}</h3>
+      <div class="meta"><span>${when}</span><span>${d.blocks} blocs</span>
+      ${d.diagrams ? `<span>${d.diagrams} schéma(s)</span>` : ""}
+      ${d.attachments ? `<span>${d.attachments} document(s)</span>` : ""}</div>`;
+    card.onclick = () => openDoc(d.id);
+    card.querySelector(".del").onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Supprimer « ${d.title} » ? C'est définitif.`)) return;
+      await fetch("/delete", { method: "POST", headers: { "Content-Type": "application/json" },
+                               body: JSON.stringify({ id: d.id }) });
+      loadLibrary();
+    };
+    host.appendChild(card);
+  }
+}
 
-// ------------------------------------------------------------ enregistrement
-$("recBtn").addEventListener("click", () => (state.rec ? stopRec() : startRec()));
+async function openDoc(id) {
+  const saved = await (await fetch(`/load?id=${encodeURIComponent(id)}`)).json();
+  if (saved.empty) return;
+  state.id = id;
+  state.segments = saved.segments ?? [];
+  state.attachments = saved.attachments ?? [];
+  state.doc = saved.doc ?? null;
+  state.diagrams = saved.diagrams ?? [];
+  state.title = saved.doc?.title ?? "";
+  $("docTitle").value = state.title;
+  $("attachments").innerHTML = "";
+  for (const [i, a] of state.attachments.entries()) {
+    const c = document.createElement("div"); c.className = "att";
+    c.innerHTML = `<div class="top"><b>${esc(a.name)}</b><span class="tag">a${i}</span></div><pre>${esc(a.text.slice(0, 700))}</pre>`;
+    $("attachments").appendChild(c);
+  }
+  if (state.segments.length)
+    renderTranscript({ segments: state.segments, audioDurationMs: state.segments.at(-1).endMs, processingMs: 1 }, 0);
+  else { $("transcript").innerHTML = `<div class="empty">Pas de transcription enregistrée.</div>`; $("tStats").hidden = true; }
+  if (state.doc) renderSheet(); else $("sheet").innerHTML = `<div class="empty">Séance sans notes.</div>`;
+  state.dirty = false; $("saveState").textContent = ""; refresh(); show("ses");
+}
+
+$("newBtn").onclick = () => {
+  Object.assign(state, { id: null, title: "", segments: [], attachments: [], doc: null, diagrams: [] });
+  $("docTitle").value = ""; $("attachments").innerHTML = "";
+  $("transcript").innerHTML = `<div class="empty">Rien encore.</div>`; $("tStats").hidden = true;
+  $("sheet").innerHTML = `<div class="empty">Enregistre une séance ou dépose un document, puis génère les notes.</div>`;
+  $("player").hidden = true; $("saveState").textContent = ""; refresh(); show("ses");
+};
+
+// ------------------------------------------------------------ capture
+const BARS = 24;
+const bars = Array.from({ length: BARS }, () => {
+  const b = document.createElement("div"); b.className = "bar"; $("levelWrap").appendChild(b); return b;
+});
+$("recBtn").onclick = () => (state.rec ? stopRec() : startRec());
 
 async function startRec() {
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true },
-    });
-  } catch {
-    $("status").innerHTML = `<span class="err">micro refusé</span>`; return;
-  }
-  const ctx = new AudioContext();
-  const an = ctx.createAnalyser(); an.fftSize = 512;
+      audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: true } });
+  } catch { $("status").innerHTML = `<span class="err">micro refusé</span>`; return; }
+  const ctx = new AudioContext(); const an = ctx.createAnalyser(); an.fftSize = 512;
   ctx.createMediaStreamSource(stream).connect(an);
   const data = new Uint8Array(an.frequencyBinCount);
   const draw = () => {
     if (!state.rec) { bars.forEach((b) => (b.style.height = "4px")); return; }
     an.getByteFrequencyData(data);
     const step = Math.floor(data.length / BARS);
-    bars.forEach((b, i) => {
-      const v = data[i * step] / 255;
-      b.style.height = `${4 + v * 32}px`;
-      b.style.background = v > 0.05 ? "var(--accent)" : "var(--line)";
-    });
+    bars.forEach((b, i) => { const v = data[i * step] / 255;
+      b.style.height = `${4 + v * 28}px`; b.style.background = v > 0.05 ? "var(--accent)" : "var(--line)"; });
     requestAnimationFrame(draw);
   };
   const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/mp4";
@@ -234,19 +384,14 @@ async function startRec() {
   state.rec.ondataavailable = (e) => e.data.size > 0 && state.chunks.push(e.data);
   state.rec.onstop = () => { stream.getTracks().forEach((t) => t.stop()); ctx.close();
                              transcribe(new Blob(state.chunks, { type: mime }), mime); };
-  state.rec.start(1000);
-  state.startedAt = Date.now(); draw();
-  $("recBtn").classList.add("recording"); $("recBtn").textContent = "■";
-  $("status").textContent = "enregistrement…";
+  state.rec.start(1000); state.startedAt = Date.now(); draw();
+  $("recBtn").classList.add("recording"); $("recBtn").textContent = "■"; $("status").textContent = "enregistrement…";
   state.timer = setInterval(() => ($("timer").textContent = fmt(Date.now() - state.startedAt)), 250);
 }
-
 function stopRec() {
   clearInterval(state.timer); state.rec.stop(); state.rec = null;
-  $("recBtn").classList.remove("recording"); $("recBtn").textContent = "●";
-  $("status").textContent = "transcription…";
+  $("recBtn").classList.remove("recording"); $("recBtn").textContent = "●"; $("status").textContent = "transcription…";
 }
-
 async function transcribe(blob, mime) {
   if (state.blobUrl) URL.revokeObjectURL(state.blobUrl);
   state.blobUrl = URL.createObjectURL(blob);
@@ -259,69 +404,55 @@ async function transcribe(blob, mime) {
     if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
     state.segments = res.segments;
     renderTranscript(res, (performance.now() - t0) / 1000);
-    refreshButtons(); $("status").textContent = "prêt";
+    refresh(); markDirty(); $("status").textContent = "prêt";
   } catch (e) { $("status").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
 }
-
 function renderTranscript(res, wall) {
   const host = $("transcript"); host.innerHTML = "";
   if (!res.segments.length) { host.innerHTML = `<div class="empty">Aucune parole détectée.</div>`; return; }
-  host.classList.add("scroll");
   for (const seg of res.segments) {
     const d = document.createElement("div");
     d.className = "seg" + (seg.avgConfidence < 0.6 ? " low" : "");
     d.dataset.start = seg.startMs; d.dataset.end = seg.endMs;
     d.innerHTML = `<time title="confiance ${(seg.avgConfidence * 100).toFixed(0)} %">${fmt(seg.startMs)}</time><span>${esc(seg.text)}</span>`;
-    d.querySelector("time").addEventListener("click", () => seek(seg.startMs));
+    d.querySelector("time").onclick = () => seek(seg.startMs);
     host.appendChild(d);
   }
   $("tStats").hidden = false;
   $("tStats").innerHTML = `<span>durée <b>${fmt(res.audioDurationMs)}</b></span>
     <span>segments <b>${res.segments.length}</b></span>
-    <span>transcrit en <b>${wall.toFixed(1)} s</b></span>
-    <span>soit <b>${(res.audioDurationMs / res.processingMs).toFixed(1)}×</b> le temps réel</span>
+    ${wall ? `<span>transcrit en <b>${wall.toFixed(1)} s</b></span>` : ""}
     <span>coût <b>0,00 €</b></span>`;
 }
-
-const seek = (ms) => { const p = $("player"); p.currentTime = ms / 1000; p.play(); };
+const seek = (ms) => { const p = $("player"); if (!p.src) return; p.currentTime = ms / 1000; p.play(); };
 $("player").addEventListener("timeupdate", () => {
   const ms = $("player").currentTime * 1000;
   for (const el of document.querySelectorAll(".seg"))
     el.classList.toggle("playing", ms >= +el.dataset.start && ms < +el.dataset.end);
 });
 
-// ------------------------------------------------------------------ documents
+// ---------------------------------------------------------- documents
 const drop = $("drop");
-drop.addEventListener("click", () => $("fileInput").click());
-drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
-drop.addEventListener("dragleave", () => drop.classList.remove("over"));
-drop.addEventListener("drop", (e) => {
-  e.preventDefault(); drop.classList.remove("over");
-  handleFiles([...e.dataTransfer.files]);
-});
-$("fileInput").addEventListener("change", (e) => handleFiles([...e.target.files]));
-
-$("pasteBtn").addEventListener("click", async () => {
+drop.onclick = () => $("fileInput").click();
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); handleFiles([...e.dataTransfer.files]); };
+$("fileInput").onchange = (e) => handleFiles([...e.target.files]);
+$("pasteBtn").onclick = async () => {
   const text = prompt("Colle le texte (plan du cours, énoncé, notes déjà prises) :");
   if (text?.trim()) await addAttachment({ kind: "text", name: "texte collé", text });
-});
-
+};
 async function handleFiles(files) {
   for (const file of files) {
     if (file.type.startsWith("image/")) {
       const dataUrl = await new Promise((res) => {
-        const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(file);
-      });
+        const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(file); });
       await addAttachment({ kind: "image", name: file.name, dataUrl }, dataUrl);
-    } else {
-      await addAttachment({ kind: "text", name: file.name, text: await file.text() });
-    }
+    } else await addAttachment({ kind: "text", name: file.name, text: await file.text() });
   }
 }
-
 async function addAttachment(payload, preview) {
-  const card = document.createElement("div");
-  card.className = "att";
+  const card = document.createElement("div"); card.className = "att";
   card.innerHTML = `<div class="top"><b>${esc(payload.name)}</b><span class="tag">lecture…</span></div>`;
   $("attachments").appendChild(card);
   try {
@@ -329,117 +460,127 @@ async function addAttachment(payload, preview) {
       headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const res = await r.json();
     if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
-    const index = state.attachments.length;
+    const i = state.attachments.length;
     state.attachments.push({ name: res.name, text: res.text, kind: res.kind });
     card.innerHTML = `<div class="top"><b>${esc(res.name)}</b>
-        <span class="tag">a${index} · ${res.kind === "image" ? "photo lue" : "texte"} · ${res.costEuros ?? ""}</span>
-        <button class="sm" data-i="${index}">retirer</button></div>
-      ${preview ? `<img src="${preview}" alt="">` : ""}
-      <pre>${esc(res.text.slice(0, 1400))}</pre>`;
-    card.querySelector("button").addEventListener("click", () => {
-      state.attachments[index] = null; card.remove(); refreshButtons();
-    });
-    refreshButtons();
+        <span class="tag">a${i} · ${res.kind === "image" ? "photo lue" : "texte"} · ${res.costEuros ?? ""}</span>
+        <button class="sm ghost">✕</button></div>
+      ${preview ? `<img src="${preview}" alt="">` : ""}<pre>${esc(res.text.slice(0, 1200))}</pre>`;
+    card.querySelector("button").onclick = () => { state.attachments[i] = null; card.remove(); refresh(); };
+    refresh(); markDirty();
   } catch (e) {
     card.innerHTML = `<div class="top"><b>${esc(payload.name)}</b><span class="err">${esc(e.message)}</span></div>`;
   }
 }
+const live = () => state.attachments.filter(Boolean);
 
-const liveAttachments = () => state.attachments.filter(Boolean);
-
-function refreshButtons() {
-  const has = state.segments.length > 0 || liveAttachments().length > 0;
+function refresh() {
+  const has = state.segments.length > 0 || live().length > 0;
   $("notesBtn").disabled = !has;
-  $("diagBtn").disabled = !has;
-  $("saveBtn").disabled = !state.doc;
+  $("diagBtn").disabled = !state.doc && !has;
+  const hasDoc = !!state.doc;
+  $("mdBtn").disabled = !hasDoc; $("printBtn").disabled = !hasDoc; $("saveBtn").disabled = !hasDoc && !has;
 }
 
-// ---------------------------------------------------------------------- notes
-$("notesBtn").addEventListener("click", async () => {
-  const btn = $("notesBtn"); btn.disabled = true; btn.textContent = "génération…";
-  $("notesErr").textContent = "";
+// ------------------------------------------------------------- notes
+$("notesBtn").onclick = async () => {
+  const btn = $("notesBtn"); btn.disabled = true; btn.textContent = "génération…"; $("notesErr").textContent = "";
   try {
-    // §6.4 : ce que l'humain a écrit n'est jamais écrasé — on le renvoie au
-    // modèle pour qu'il complète autour au lieu de le refaire.
     const keepEdited = (state.doc?.blocks ?? []).filter((b) => b.edited).map((b) => b.text ?? b.definition ?? "");
     const r = await fetch("/notes", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ segments: state.segments, attachments: liveAttachments(), keepEdited }) });
+      body: JSON.stringify({ segments: state.segments, attachments: live(), keepEdited,
+                             enrich: $("enrichChk").checked }) });
     const res = await r.json();
     if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
     const edited = (state.doc?.blocks ?? []).filter((b) => b.edited);
     res.blocks = [...edited, ...res.blocks];
-    state.doc = res; renderNotes();
+    state.doc = res;
+    if (!$("docTitle").value) $("docTitle").value = res.title;
+    renderSheet(); markDirty();
   } catch (e) { $("notesErr").textContent = e.message; }
-  finally { btn.disabled = false; btn.textContent = "Générer les notes"; refreshButtons(); }
-});
+  finally { btn.disabled = false; btn.textContent = "Générer les notes"; refresh(); }
+};
 
 function anchorHtml(a) {
   if (!a) return "";
-  if (a.kind === "attachment") return `<span class="anchor att" title="${esc((a.names || []).join(", "))}">🖼 ${esc((a.names || [])[0] ?? "document")}</span>`;
-  return `<span class="anchor" data-ms="${a.startMs}">↩ ${fmt(a.startMs)}</span>`;
+  if (a.kind === "attachment")
+    return `<span class="anchor att" title="${esc((a.names || []).join(", "))}">doc</span>`;
+  return `<span class="anchor" data-ms="${a.startMs}" title="${esc((a.names||[]).join(', '))}">${fmt(a.startMs)}</span>`;
 }
 
 function blockHtml(b, i) {
   const a = anchorHtml(b.anchor);
-  const cls = `blk${b.edited ? " edited" : ""}`;
-  const attrs = `class="${cls}" contenteditable="true" data-i="${i}"`;
-  if (b.type === "heading") return `<h4 ${attrs}>${esc(b.text)}</h4>${a}`;
+  const attrs = `class="blk${b.edited ? " edited" : ""}" contenteditable="true" data-i="${i}"`;
+  if (b.type === "heading") return b.level >= 3 ? `<h3 ${attrs}>${esc(b.text)}${a}</h3>` : `<h2 ${attrs}>${esc(b.text)}${a}</h2>`;
   if (b.type === "bullets") return `<ul ${attrs}>${b.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>${a}`;
-  if (b.type === "definition") return `<div class="def"><p ${attrs}><b>${esc(b.term)}</b> — ${esc(b.definition)}</p>${a}</div>`;
-  if (b.type === "callout") return `<div class="callout ${esc(b.kind)}"><span class="lbl">${esc(b.kind.replace("-", " "))}</span><span ${attrs}>${esc(b.text)}</span>${a}</div>`;
-  return `<p ${attrs}>${esc(b.text ?? "")}</p>${a}`;
+  if (b.type === "definition")
+    return `<div class="def"><p ${attrs}><span class="term">${esc(b.term)}</span> — ${esc(b.definition)}</p>${a}</div>`;
+  if (b.type === "callout")
+    return `<div class="callout ${esc(b.kind)}"><span class="lbl">${esc(b.kind.replace("-", " "))}</span><span ${attrs}>${esc(b.text)}</span>${a}</div>`;
+  return `<p ${attrs}>${esc(b.text)}${a}</p>`;
 }
 
-function renderNotes() {
-  const d = state.doc, host = $("notes");
-  const parts = [`<h3 class="blk" contenteditable="true" data-i="title">${esc(d.title)}</h3>`,
-                 `<p class="blk" contenteditable="true" data-i="summary">${esc(d.summary)}</p>`];
+function renderSheet() {
+  const d = state.doc, host = $("sheet");
+  const dur = state.segments.length ? fmt(state.segments.at(-1).endMs) : null;
+  const bits = [dur && `${dur} de cours`, `${d.blocks.length} blocs`,
+                live().length && `${live().length} document(s)`,
+                new Date().toLocaleDateString("fr-FR", { dateStyle: "long" })].filter(Boolean);
+
+  const parts = [
+    `<h1 class="doctitle blk" contenteditable="true" data-i="title">${esc(d.title)}</h1>`,
+    `<div class="docmeta">${bits.join(" · ")}</div>`,
+    `<p class="lede blk" contenteditable="true" data-i="summary">${esc(d.summary)}</p>`,
+  ];
   d.blocks.forEach((b, i) => parts.push(blockHtml(b, i)));
+
+  if (d.enrichments?.length) {
+    parts.push(`<h2 style="margin-top:36px">Compléments</h2>`);
+    parts.push(`<p style="font-family:var(--sans);font-size:12.5px;color:var(--muted);margin-top:-4px">
+      Ces blocs ne viennent pas du cours : ils comblent des prérequis supposés connus. Vérifie-les avant de réviser dessus.</p>`);
+    for (const e of d.enrichments)
+      parts.push(`<div class="enrich"><span class="lbl">hors cours · ${esc(e.title ?? "complément")}</span>
+        ${esc(e.text)}${e.why ? `<div class="why">${esc(e.why)}</div>` : ""}</div>`);
+  }
+
   if (d.glossary?.length) {
-    parts.push(`<h4>Glossaire</h4>`);
+    parts.push(`<div class="gloss"><h2 style="margin-top:0">Glossaire</h2><dl>`);
     for (const g of d.glossary)
-      parts.push(`<div class="def"><b>${esc(g.term)}</b> — ${esc(g.definition)}${anchorHtml(g.anchor)}</div>`);
+      parts.push(`<dt>${esc(g.term)}${anchorHtml(g.anchor)}</dt><dd>${esc(g.definition)}</dd>`);
+    parts.push(`</dl></div>`);
   }
+
+  parts.push(`<div id="diagHost"></div>`);
   if (d.rejectedBlocks > 0)
-    parts.push(`<p class="err">${d.rejectedBlocks} bloc(s) écarté(s) : la source citée ne correspond pas au contenu.</p>`);
-  if (d.fallbackNote) parts.push(`<p class="err">${esc(d.fallbackNote)}</p>`);
-  parts.push(`<div class="stats"><span>modèle <b>${esc(d.model)}</b></span>
-    <span>coût <b>${esc(d.costEuros)}</b></span><span>en <b>${(d.latencyMs / 1000).toFixed(1)} s</b></span>
-    <span>blocs <b>${d.blocks.length}</b></span></div>`);
+    parts.push(`<p class="err noprint">${d.rejectedBlocks} bloc(s) écarté(s) : la source citée ne correspondait pas.</p>`);
+  if (d.fallbackNote) parts.push(`<p class="err noprint">${esc(d.fallbackNote)}</p>`);
+  parts.push(`<div class="stats noprint"><span>modèle <b>${esc(d.model)}</b></span>
+    <span>coût <b>${esc(d.costEuros)}</b></span><span>en <b>${(d.latencyMs / 1000).toFixed(1)} s</b></span></div>`);
+
   host.innerHTML = parts.join("");
+  for (const el of host.querySelectorAll(".anchor[data-ms]")) el.onclick = () => seek(+el.dataset.ms);
+  for (const el of host.querySelectorAll(".blk")) el.addEventListener("input", () => onEdit(el));
+  state.diagrams.forEach((dg, i) => renderDiagram(dg, i));
+}
 
-  for (const el of host.querySelectorAll(".anchor[data-ms]"))
-    el.addEventListener("click", () => seek(+el.dataset.ms));
-
-  for (const el of host.querySelectorAll(".blk")) {
-    el.addEventListener("input", () => {
-      const i = el.dataset.i;
-      const text = el.innerText.trim();
-      if (i === "title") d.title = text;
-      else if (i === "summary") d.summary = text;
-      else {
-        const b = d.blocks[+i];
-        if (!b) return;
-        b.edited = true;
-        if (b.type === "bullets") b.items = [...el.querySelectorAll("li")].map((li) => li.innerText.trim());
-        else if (b.type === "definition") b.definition = text.replace(/^.*?—\s*/, "");
-        else b.text = text;
-        el.classList.add("edited");
-      }
-      markDirty();
-    });
+function onEdit(el) {
+  const d = state.doc, i = el.dataset.i, text = el.innerText.trim();
+  if (i === "title") { d.title = text; $("docTitle").value = text; }
+  else if (i === "summary") d.summary = text;
+  else {
+    const b = d.blocks[+i]; if (!b) return;
+    b.edited = true;
+    if (b.type === "bullets") b.items = [...el.querySelectorAll("li")].map((li) => li.innerText.trim());
+    else if (b.type === "definition") b.definition = text.replace(/^.*?—\s*/, "");
+    else b.text = text.replace(/\s*\d{2}:\d{2}\s*$/, "");
+    el.classList.add("edited");
   }
-  updateEditHint(); markDirty();
+  markDirty();
 }
 
-function updateEditHint() {
-  const n = (state.doc?.blocks ?? []).filter((b) => b.edited).length;
-  $("editHint").textContent = n ? `— ${n} bloc(s) modifié(s), protégés en régénération` : "";
-}
-
-// ------------------------------------------------------------------- schémas
-$("diagBtn").addEventListener("click", async () => {
-  const instruction = prompt("Que veux-tu représenter ? (laisse vide pour laisser l'IA choisir)", "") ?? "";
+// ---------------------------------------------------------- schémas
+$("diagBtn").onclick = async () => {
+  const instruction = prompt("Que veux-tu représenter ? (vide = l'IA choisit)", "") ?? "";
   const btn = $("diagBtn"); btn.disabled = true; btn.textContent = "schéma…";
   try {
     const context = state.doc
@@ -449,85 +590,93 @@ $("diagBtn").addEventListener("click", async () => {
       body: JSON.stringify({ context: context.slice(0, 12000), instruction }) });
     const res = await r.json();
     if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
-    state.diagrams.push(res); await renderDiagram(res, state.diagrams.length - 1);
-    markDirty();
+    if (!res.mermaid?.trim()) { $("notesErr").textContent = res.explanation || "Ce passage ne se prête pas à un schéma."; return; }
+    state.diagrams.push(res); renderDiagram(res, state.diagrams.length - 1); markDirty();
   } catch (e) { $("notesErr").textContent = e.message; }
-  finally { btn.disabled = false; btn.textContent = "Faire un schéma"; refreshButtons(); }
-});
+  finally { btn.disabled = false; btn.textContent = "Faire un schéma"; refresh(); }
+};
 
 async function renderDiagram(d, index) {
+  const host = $("diagHost"); if (!host) return;
   let card = document.getElementById(`diag-${index}`);
   if (!card) {
-    card = document.createElement("div"); card.className = "diagram"; card.id = `diag-${index}`;
-    card.innerHTML = `<h4 style="margin:0 0 4px">${esc(d.title)}</h4>
-      <div class="cap">${esc(d.explanation)}</div>
-      <div class="render"></div>
-      <details><summary class="cap" style="cursor:pointer">Code Mermaid — modifiable</summary>
-      <textarea spellcheck="false"></textarea>
-      <button class="sm" style="margin-top:6px">Re-rendre</button></details>`;
-    $("diagrams").appendChild(card);
+    card = document.createElement("figure"); card.className = "diagram"; card.id = `diag-${index}`;
+    card.style.margin = "22px 0";
+    card.innerHTML = `<div style="display:flex;align-items:baseline;gap:8px">
+        <h4 style="flex:1">${esc(d.title)}</h4><button class="sm ghost noprint" title="Retirer">✕</button></div>
+      <p class="cap">${esc(d.explanation)}</p><div class="render"></div>
+      <details class="noprint"><summary class="cap" style="cursor:pointer">Code Mermaid — modifiable</summary>
+      <textarea spellcheck="false"></textarea><button class="sm" style="margin-top:6px">Re-rendre</button></details>`;
+    host.appendChild(card);
     card.querySelector("textarea").value = d.mermaid;
-    card.querySelector("button").addEventListener("click", () => {
-      state.diagrams[index].mermaid = card.querySelector("textarea").value;
-      renderDiagram(state.diagrams[index], index); markDirty();
-    });
+    const [del, rerender] = card.querySelectorAll("button");
+    del.onclick = () => { state.diagrams[index] = null; card.remove(); markDirty(); };
+    rerender.onclick = () => { state.diagrams[index].mermaid = card.querySelector("textarea").value;
+                               drawInto(card, state.diagrams[index], index); markDirty(); };
   }
+  drawInto(card, d, index);
+}
+async function drawInto(card, d, index) {
   const target = card.querySelector(".render");
   try {
     const { svg } = await mermaid.render(`m${index}-${Date.now()}`, d.mermaid);
     target.innerHTML = svg;
   } catch (e) {
-    // Un petit modèle produit régulièrement du Mermaid légèrement invalide.
-    // On montre l'erreur ET le code, pour que ce soit corrigeable à la main.
-    target.innerHTML = `<div class="err">Mermaid n'a pas pu rendre ce schéma : ${esc(e.message?.split("\n")[0] ?? e)}</div>`;
+    target.innerHTML = `<div class="err">Mermaid n'a pas pu rendre ce schéma : ${esc(String(e.message ?? e).split("\n")[0])}</div>`;
     card.querySelector("details").open = true;
   }
 }
 
-// --------------------------------------------------------------- persistance
-function markDirty() {
-  state.dirty = true; $("saveBtn").disabled = false;
-  $("saveState").textContent = "modifications non enregistrées";
-  updateEditHint();
-}
+// ------------------------------------------------------------ export
+$("printBtn").onclick = () => window.print();
 
-$("saveBtn").addEventListener("click", save);
+$("mdBtn").onclick = () => {
+  const d = state.doc, L = [`# ${d.title}`, "", d.summary, ""];
+  const ts = (a) => (a?.kind === "transcript" ? ` ^[${fmt(a.startMs)}]` : a ? " ^[doc]" : "");
+  for (const b of d.blocks) {
+    if (b.type === "heading") L.push("", (b.level >= 3 ? "### " : "## ") + b.text + ts(b.anchor), "");
+    else if (b.type === "bullets") { for (const it of b.items) L.push(`- ${it}`); L.push(ts(b.anchor).trim(), ""); }
+    else if (b.type === "definition") L.push(`**${b.term}** — ${b.definition}${ts(b.anchor)}`, "");
+    else if (b.type === "callout") L.push(`> **${b.kind.replace("-", " ").toUpperCase()}** — ${b.text}${ts(b.anchor)}`, "");
+    else L.push(b.text + ts(b.anchor), "");
+  }
+  for (const dg of state.diagrams.filter(Boolean))
+    L.push("", `### ${dg.title}`, "", "```mermaid", dg.mermaid, "```", "", `*${dg.explanation}*`, "");
+  if (d.enrichments?.length) {
+    L.push("", "## Compléments", "", "*Hors cours — vérifie avant de réviser dessus.*", "");
+    for (const e of d.enrichments) L.push(`**${e.title ?? "Complément"}** — ${e.text}`, "");
+  }
+  if (d.glossary?.length) {
+    L.push("", "## Glossaire", "");
+    for (const g of d.glossary) L.push(`**${g.term}** — ${g.definition}${ts(g.anchor)}`, "");
+  }
+  const blob = new Blob([L.join("\n")], { type: "text/markdown;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = `${slug(d.title)}.md`; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+
+// ------------------------------------------------------- persistance
+function markDirty() { state.dirty = true; $("saveBtn").disabled = false;
+                       $("saveState").textContent = "non enregistré"; }
+$("docTitle").addEventListener("input", () => { state.title = $("docTitle").value; markDirty(); });
+
+$("saveBtn").onclick = save;
 async function save() {
+  const title = $("docTitle").value.trim() || state.doc?.title || "Séance sans titre";
+  if (state.doc) state.doc.title = title;
+  state.id ??= `${slug(title)}-${Date.now().toString(36)}`;
   try {
     await fetch("/save", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: "default", doc: state.doc, diagrams: state.diagrams,
-                             attachments: liveAttachments(), segments: state.segments,
-                             savedAt: new Date().toISOString() }) });
-    state.dirty = false;
+      body: JSON.stringify({ id: state.id, doc: state.doc, diagrams: state.diagrams.filter(Boolean),
+                             attachments: live(), segments: state.segments, savedAt: new Date().toISOString() }) });
+    state.dirty = false; $("saveBtn").disabled = true;
     $("saveState").textContent = `enregistré à ${new Date().toLocaleTimeString("fr-FR")}`;
-    $("saveBtn").disabled = true;
-  } catch (e) { $("saveState").textContent = "échec de l'enregistrement"; }
+  } catch { $("saveState").textContent = "échec de l'enregistrement"; }
 }
-
 addEventListener("beforeunload", (e) => { if (state.dirty) { e.preventDefault(); e.returnValue = ""; } });
 
-(async function restore() {
-  try {
-    const saved = await (await fetch("/load?id=default")).json();
-    if (saved.empty) return;
-    state.segments = saved.segments ?? [];
-    state.attachments = saved.attachments ?? [];
-    state.doc = saved.doc ?? null;
-    state.diagrams = saved.diagrams ?? [];
-    if (state.segments.length)
-      renderTranscript({ segments: state.segments, audioDurationMs: state.segments.at(-1).endMs, processingMs: 1 }, 0);
-    for (const [i, a] of state.attachments.entries()) {
-      const c = document.createElement("div"); c.className = "att";
-      c.innerHTML = `<div class="top"><b>${esc(a.name)}</b><span class="tag">a${i} · restauré</span></div><pre>${esc(a.text.slice(0, 800))}</pre>`;
-      $("attachments").appendChild(c);
-    }
-    if (state.doc) renderNotes();
-    for (const [i, d] of state.diagrams.entries()) await renderDiagram(d, i);
-    state.dirty = false; $("saveBtn").disabled = true;
-    $("saveState").textContent = `restauré · ${saved.savedAt?.slice(11, 16) ?? ""}`;
-    refreshButtons();
-  } catch { /* pas de sauvegarde : premier lancement */ }
-})();
+loadLibrary();
 </script>
 </body>
 </html>

@@ -68,6 +68,16 @@ ajoute une information absente.
 qu'ils sont prononcés. Structure hiérarchiquement. Extrais les définitions et les
 formules. Signale ce que l'enseignant présente comme important ou comme un piège.
 
+N'ÉCRIS PAS DE SECTION VIDE. Si l'enseignant annonce un titre sans rien développer
+dessous — « Introduction au CPU et à la RAM » suivi d'autre chose — n'invente pas de
+contenu et ne crée pas la section. Un plan avec des rubriques creuses est pire que pas
+de plan : l'étudiant croit avoir des notes et n'a que des intitulés. Mieux vaut trois
+sections denses que douze coquilles. De même, **ne fabrique pas de bloc à partir d'une phrase administrative**. « Des
+questions ? », « on verra ça la semaine prochaine », « vous m'entendez au fond »,
+« on reprend où on s'était arrêtés » ne sont pas du contenu de cours : ils ne
+méritent ni encadré, ni paragraphe. Seule exception : une échéance, une salle
+d'examen ou une consigne de rendu, qui valent un encadré.
+
 Réponds UNIQUEMENT par un objet JSON valide de cette forme :
 {
   "title": "titre du cours",
@@ -82,7 +92,15 @@ Réponds UNIQUEMENT par un objet JSON valide de cette forme :
   ],
   "glossary": [{"term":"...","definition":"...","sourceSegmentIds":["s4"]}]
 }
-`kind` vaut a-retenir, exemple, attention ou question-ouverte."""
+`kind` vaut a-retenir, exemple, attention ou question-ouverte.
+
+ENRICHISSEMENT — activé uniquement quand la consigne le demande explicitement.
+Tu peux alors ajouter des blocs de type "enrichment" qui apportent ce qui manque au
+cours : définition d'un prérequis supposé connu, contre-exemple éclairant, rappel de
+notation. Ces blocs ne portent PAS de source, puisqu'ils ne viennent pas du cours —
+ils sont affichés séparément et signalés comme extérieurs. Reste sobre : deux à cinq
+blocs au maximum, et uniquement là où le cours laisse un vrai trou. Format :
+{"type":"enrichment","title":"...","text":"...","why":"pourquoi c'est utile ici"}"""
 
 VISION_PROMPT = """Tu lis une photo prise pendant un cours : tableau, diapositive projetée, ou page de notes.
 
@@ -102,7 +120,13 @@ modèle de données, gantt pour un planning. Ne force pas un flowchart sur ce qu
 Contraintes de syntaxe, importantes car le rendu échoue sinon :
 - mets tout libellé contenant des espaces, accents ou ponctuation entre guillemets ;
 - pas de parenthèses ni de crochets nus dans les libellés ;
-- huit à quinze nœuds au maximum, un diagramme illisible ne sert à rien.
+- **six à douze nœuds**, jamais plus : au-delà c'est une liste déguisée, pas un schéma ;
+- le `title` doit décrire ce que le schéma montre RÉELLEMENT. Si tu produis un
+  enchaînement linéaire, ne l'intitule pas « choix entre A, B et C » — ce serait mentir
+  sur le contenu. Un titre juste et modeste vaut mieux qu'un titre vendeur et faux ;
+- si le passage ne se prête pas à un schéma — une simple énumération, une définition —
+  renvoie {"mermaid": "", "title": "", "explanation": "ce passage ne se prête pas à un
+  schéma : ..."} plutôt que de forcer un diagramme sans intérêt.
 
 Réponds uniquement par un objet JSON :
 {"mermaid": "flowchart TD\\n  A[\\"...\\"] --> B[\\"...\\"]", "title": "titre court", "explanation": "une phrase sur ce que montre le schéma"}"""
@@ -118,6 +142,28 @@ def content_words(text: str) -> set[str]:
     text = unicodedata.normalize("NFD", text.lower())
     text = "".join(c for c in text if unicodedata.category(c) != "Mn")
     return {w for w in re.sub(r"[^a-z0-9\s]", " ", text).split() if len(w) > 3 and w not in STOPWORDS}
+
+
+def drop_hollow_headings(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Supprime les titres qui ne sont suivis d'aucun contenu.
+
+    Le modèle a beau être prié de ne pas créer de section vide, il le fait quand
+    l'enseignant annonce un plan qu'il ne développe pas. Un contrôle structurel
+    est plus fiable qu'une consigne : un titre suivi d'un autre titre, ou en
+    dernière position, ne sert à rien.
+    """
+    out: list[dict[str, Any]] = []
+    for i, block in enumerate(blocks):
+        if block.get("type") != "heading":
+            out.append(block)
+            continue
+        nxt = next((b for b in blocks[i + 1 :] if b.get("type") != "heading"), None)
+        following_heading = next((b for b in blocks[i + 1 :]), None)
+        if nxt is None or (following_heading is not None and following_heading.get("type") == "heading"):
+            continue
+        out.append(block)
+    return out
 
 
 def block_text_of(block: dict[str, Any]) -> str:
@@ -331,6 +377,38 @@ def call_mistral(api_key: str, transcript: str) -> tuple[dict[str, Any], dict[st
 DATA_DIR = STUDIO_DIR.parent.parent / "data" / "studio"
 
 
+def safe_id(raw: Any) -> str:
+    """Un identifiant de document ne doit jamais pouvoir sortir de DATA_DIR."""
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]", "", str(raw or ""))[:64]
+    return cleaned or "sans-titre"
+
+
+def list_documents() -> list[dict[str, Any]]:
+    """Index de la bibliothèque : on lit l'en-tête de chaque fichier, pas tout le corps."""
+    if not DATA_DIR.exists():
+        return []
+    docs = []
+    for path in sorted(DATA_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            payload = json.loads(path.read_text("utf-8"))
+        except (ValueError, OSError):
+            continue
+        doc = payload.get("doc") or {}
+        docs.append(
+            {
+                "id": path.stem,
+                "title": doc.get("title") or payload.get("title") or path.stem,
+                "savedAt": payload.get("savedAt"),
+                "blocks": len(doc.get("blocks") or []),
+                "diagrams": len(payload.get("diagrams") or []),
+                "attachments": len(payload.get("attachments") or []),
+                "durationMs": (payload.get("segments") or [{}])[-1].get("endMs", 0) if payload.get("segments") else 0,
+                "courseHint": payload.get("courseHint"),
+            }
+        )
+    return docs
+
+
 class StudioHandler(AsrHandler):
     """Étend le serveur ASR : sert l'interface, les pièces jointes, les notes et les schémas."""
 
@@ -349,6 +427,9 @@ class StudioHandler(AsrHandler):
             return
         if self.path == "/vendor/mermaid.min.js":
             self._send_file(STUDIO_DIR / "ui" / "vendor" / "mermaid.min.js", "application/javascript")
+            return
+        if self.path == "/docs":
+            self._send(200, {"docs": list_documents()})
             return
         if self.path.startswith("/load"):
             doc_id = self.path.partition("?id=")[2] or "default"
@@ -376,6 +457,7 @@ class StudioHandler(AsrHandler):
             "/attachment": self.handle_attachment,
             "/diagram": self.handle_diagram,
             "/save": self.handle_save,
+            "/delete": self.handle_delete,
         }
         handler = routes.get(self.path)
         if handler is None:
@@ -450,6 +532,7 @@ class StudioHandler(AsrHandler):
         payload = self._read_json()
         segments = payload.get("segments") or []
         attachments = payload.get("attachments") or []
+        enrich = bool(payload.get("enrich"))
         # §6.4 : une génération ne réécrit jamais ce qu'un humain a touché.
         keep = payload.get("keepEdited") or []
 
@@ -463,6 +546,11 @@ class StudioHandler(AsrHandler):
             parts.append(
                 "DOCUMENTS FOURNIS — photos du tableau, diapositives, notes collées\n"
                 + "\n\n".join(f"[a{i}] {a['name']}\n{a['text']}" for i, a in enumerate(attachments))
+            )
+        if enrich:
+            parts.append(
+                "CONSIGNE : ajoute des blocs \"enrichment\" là où le cours suppose un "
+                "prérequis non expliqué. Deux à cinq au maximum."
             )
         if keep:
             parts.append(
@@ -502,14 +590,32 @@ class StudioHandler(AsrHandler):
             doc, usage, latency_ms = generate_local("\n\n".join(parts))
             engine = LOCAL_LLM_MODEL.split("/")[-1] + " (local)"
 
-        kept, rejected = [], 0
+        kept, rejected, enrichments = [], 0, []
         for block in doc.get("blocks", []):
+            # Un bloc d'enrichissement assume de ne pas venir du cours : il n'a pas
+            # d'ancre, et l'interface le présente à part. La garantie de traçabilité
+            # devient « tout est soit ancré au cours, soit signalé comme extérieur ».
+            if block.get("type") == "enrichment":
+                if enrich and (block.get("text") or "").strip():
+                    enrichments.append(block)
+                continue
             anchor = verify_anchor(block, segments, attachments)
             if anchor is None:
                 rejected += 1
                 continue
             block["anchor"] = anchor
             kept.append(block)
+
+        # Le modèle place volontiers l'enrichissement dans une clé de premier
+        # niveau plutôt que parmi les blocs. On accepte les deux formes : imposer
+        # une seule façon de répondre à un petit modèle, c'est perdre du contenu
+        # valide pour une question de forme.
+        if enrich:
+            for extra in doc.get("enrichments") or doc.get("enrichment") or []:
+                if isinstance(extra, dict) and (extra.get("text") or "").strip():
+                    enrichments.append(extra)
+
+        kept = drop_hollow_headings(kept)
 
         glossary = []
         for entry in doc.get("glossary", []):
@@ -525,6 +631,7 @@ class StudioHandler(AsrHandler):
                 "title": doc.get("title", "Séance"),
                 "summary": doc.get("summary", ""),
                 "blocks": kept,
+                "enrichments": enrichments,
                 "glossary": glossary,
                 "rejectedBlocks": rejected,
                 "model": engine,
@@ -569,9 +676,16 @@ class StudioHandler(AsrHandler):
 
     # ------------------------------------------------------------ persistance
 
+    def handle_delete(self) -> None:
+        payload = self._read_json()
+        doc_id = safe_id(payload.get("id"))
+        path = DATA_DIR / f"{doc_id}.json"
+        path.unlink(missing_ok=True)
+        self._send(200, {"ok": True, "id": doc_id})
+
     def handle_save(self) -> None:
         payload = self._read_json()
-        doc_id = re.sub(r"[^a-zA-Z0-9_-]", "", str(payload.get("id") or "default")) or "default"
+        doc_id = safe_id(payload.get("id"))
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         path = DATA_DIR / f"{doc_id}.json"
         # Écriture atomique : une sauvegarde interrompue ne doit pas laisser un
