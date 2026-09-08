@@ -1,8 +1,8 @@
 # Amphi — Architecture
 
-> **Statut : PROPOSITION — à valider avant écriture de code applicatif.**
-> Rien n'a été codé. Ce document est le livrable du jalon M0.
-> Les points où j'ai dû deviner ton intention sont regroupés en **[§14](#14--ce-que-jai-dû-deviner)** — commence peut-être par là.
+> **Statut : VALIDÉ le 2026-09-08. M1 en cours.**
+> Ce document reste la référence : les décisions y sont tenues à jour au fur et à mesure des mesures réelles.
+> Les chiffres mesurés — et non plus estimés — sont en **[§11.7](#117-mesures-réelles)**.
 
 ---
 
