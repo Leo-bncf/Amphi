@@ -202,6 +202,79 @@ def resolve_language(requested: str, segments: list[dict[str, Any]]) -> tuple[st
     return code, rule
 
 
+def searchable_parts(payload: dict[str, Any]) -> list[tuple[str, str]]:
+    """
+    Décompose un document en (origine, texte) cherchables.
+
+    On indexe aussi la transcription : c'est souvent là que se trouve ce dont on
+    se souvient — « le prof a parlé de je-ne-sais-quoi » — alors que les notes,
+    elles, ont reformulé.
+    """
+    doc = payload.get("doc") or {}
+    out: list[tuple[str, str]] = [("titre", doc.get("title", "")), ("résumé", doc.get("summary", ""))]
+    for block in doc.get("blocks") or []:
+        text = " ".join(
+            str(block.get(k, "")) for k in ("text", "term", "definition", "caption", "latex")
+        ) + " ".join(block.get("items") or [])
+        if text.strip():
+            out.append(("notes", text))
+    for entry in doc.get("glossary") or []:
+        out.append(("glossaire", f"{entry.get('term','')} — {entry.get('definition','')}"))
+    for extra in doc.get("enrichments") or []:
+        out.append(("complément", f"{extra.get('title','')} {extra.get('text','')}"))
+    for att in payload.get("attachments") or []:
+        out.append(("document", att.get("text", "")))
+    transcript = " ".join(seg.get("text", "") for seg in payload.get("segments") or [])
+    if transcript.strip():
+        out.append(("transcription", transcript))
+    return out
+
+
+def search_documents(query: str, limit: int = 60) -> list[dict[str, Any]]:
+    """Recherche plein texte, insensible à la casse et aux accents."""
+    needle = " ".join(w for w in content_words(query) if w) or query.strip().lower()
+    if not needle:
+        return []
+    terms = needle.split()
+    results = []
+    for path in sorted(DATA_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            payload = json.loads(path.read_text("utf-8"))
+        except (ValueError, OSError):
+            continue
+        hits, score = [], 0
+        for origin, text in searchable_parts(payload):
+            flat = strip_accents(text)
+            for term in terms:
+                pos = flat.find(term)
+                if pos == -1:
+                    continue
+                score += 3 if origin in ("titre", "notes", "glossaire") else 1
+                if len(hits) < 3:
+                    start = max(0, pos - 55)
+                    snippet = text[start : pos + len(term) + 85].strip()
+                    hits.append({"where": origin, "snippet": ("…" if start else "") + snippet + "…"})
+                break
+        if hits:
+            doc = payload.get("doc") or {}
+            results.append({
+                "id": path.stem,
+                "title": doc.get("title") or path.stem,
+                "course": (payload.get("course") or "").strip(),
+                "chapter": (payload.get("chapter") or "").strip(),
+                "savedAt": payload.get("savedAt"),
+                "score": score,
+                "hits": hits,
+            })
+    results.sort(key=lambda r: -r["score"])
+    return results[:limit]
+
+
+def strip_accents(text: str) -> str:
+    text = unicodedata.normalize("NFD", text.lower())
+    return "".join(c for c in text if unicodedata.category(c) != "Mn")
+
+
 def drop_hollow_headings(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Supprime les titres qui ne sont suivis d'aucun contenu.
@@ -508,7 +581,8 @@ def list_documents() -> list[dict[str, Any]]:
                 "diagrams": len(payload.get("diagrams") or []),
                 "attachments": len(payload.get("attachments") or []),
                 "durationMs": (payload.get("segments") or [{}])[-1].get("endMs", 0) if payload.get("segments") else 0,
-                "courseHint": payload.get("courseHint"),
+                "course": (payload.get("course") or "").strip(),
+                "chapter": (payload.get("chapter") or "").strip(),
             }
         )
     return docs
@@ -542,6 +616,11 @@ class StudioHandler(AsrHandler):
             types = {".js": "application/javascript", ".css": "text/css; charset=utf-8",
                      ".woff2": "font/woff2", ".woff": "font/woff"}
             self._send_file(target, types.get(target.suffix, "application/octet-stream"))
+            return
+        if self.path.startswith("/search"):
+            from urllib.parse import parse_qs, urlparse
+            q = (parse_qs(urlparse(self.path).query).get("q") or [""])[0]
+            self._send(200, {"query": q, "results": search_documents(q)})
             return
         if self.path == "/docs":
             self._send(200, {"docs": list_documents()})

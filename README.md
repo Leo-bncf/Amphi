@@ -46,7 +46,7 @@ pnpm test
 ./bench/.venv/bin/python apps/studio/server.py     # → http://127.0.0.1:8765
 ```
 
-Bibliothèque de séances, enregistrement micro, transcription locale avec horodatages cliquables, import de photos du tableau et de documents, notes éditables, diagrammes Mermaid, export Markdown et impression PDF. Aucun Docker, aucune base : tout tourne sur la machine.
+Bibliothèque classée par matière et chapitre avec recherche plein texte, enregistrement micro, transcription locale avec horodatages cliquables, import de photos du tableau et de documents, notes éditables, formules LaTeX rendues par KaTeX, diagrammes Mermaid, export Markdown et impression PDF. Aucun Docker, aucune base : tout tourne sur la machine.
 
 Le système visuel suit **[Hallmark](https://www.usehallmark.com)** (`npx skills add nutlope/hallmark`) : palette OKLCH à une seule teinte d'ancrage, paire typographique Bricolage Grotesque / Cardo vendorisée en local, échelle d'espacement de 4 pt, aucune bande latérale ni dégradé. Les polices sont servies depuis `apps/studio/ui/vendor/fonts/` — pas de CDN, l'app reste lisible sans réseau.
 

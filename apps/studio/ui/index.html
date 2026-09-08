@@ -127,6 +127,40 @@ label.toggle { display: inline-flex; align-items: center; gap: var(--s-2xs); fon
 .doc .del { position: absolute; top: var(--s-xs); right: var(--s-xs); opacity: 0; }
 .doc:hover .del, .doc:focus-within .del { opacity: 1; }
 
+/* Dossier : même grille que les fiches, mais l'objet se lit autrement — la
+   pastille de comptage remplace la date, et le titre est en display. */
+.folder { background: var(--paper-2); }
+.folder:hover { background: var(--paper-3); }
+.folder h3 { font-family: var(--font-display); font-weight: 700; font-size: var(--t-lg);
+             letter-spacing: -.015em; }
+.folder .count { font-family: var(--font-data); font-size: var(--t-xs); color: var(--neutral); }
+.folder .kind { font-family: var(--font-data); font-size: var(--t-xs); letter-spacing: .14em;
+                text-transform: uppercase; color: var(--accent); }
+
+.libbar { display: flex; gap: var(--s-sm); align-items: center; flex-wrap: wrap;
+          margin-bottom: var(--s-md); }
+#q { flex: 1; min-width: 240px; padding: 8px 12px; font-size: var(--t-sm); font-family: var(--font-display);
+     border: 1px solid var(--rule); background: var(--paper); color: var(--ink); border-radius: 3px; }
+#q::placeholder { color: var(--neutral); }
+.crumb { display: flex; gap: var(--s-2xs); align-items: center; font-size: var(--t-sm);
+         color: var(--neutral); margin-bottom: var(--s-sm); font-family: var(--font-display); }
+.crumb button { border: 0; background: none; color: var(--neutral); padding: 2px 0; font-size: inherit; }
+.crumb button:hover { color: var(--accent); }
+.crumb .sep { color: var(--rule); }
+.crumb .now { color: var(--ink); font-weight: 600; }
+
+.hit { background: var(--paper); border-top: 1px solid var(--hair); padding: var(--s-sm) 0;
+       cursor: pointer; }
+.hit:hover .ht { color: var(--accent); }
+.hit .ht { font-family: var(--font-body); font-size: var(--t-lg); color: var(--ink); line-height: 1.25; }
+.hit .hp { font-family: var(--font-data); font-size: var(--t-xs); color: var(--neutral);
+           display: flex; gap: var(--s-sm); margin-top: 2px; }
+.hit .hs { font-family: var(--font-body); font-size: var(--t-sm); color: var(--muted);
+           margin-top: var(--s-2xs); line-height: 1.4; }
+.hit .hs em { font-style: normal; background: var(--accent-w); color: var(--ink); padding: 0 2px; }
+.hit .hw { font-family: var(--font-data); font-size: var(--t-xs); color: var(--accent);
+           text-transform: uppercase; letter-spacing: .1em; }
+
 /* ─────────────────────────── capture ─────────────────────────── */
 #recBtn { width: 52px; height: 52px; border-radius: 50%; font-size: var(--t-lg); padding: 0;
           flex: none; display: grid; place-items: center; }
@@ -330,10 +364,11 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
 
 <main>
   <section id="viewLib">
-    <div class="row" style="margin-bottom:14px">
+    <div class="libbar">
       <button class="primary" id="newBtn">Nouvelle séance</button>
-      <span class="hint" style="margin:0">Clique une séance pour la rouvrir, la compléter, y ajouter des images, l'imprimer.</span>
+      <input id="q" type="search" placeholder="Chercher dans les notes, le glossaire, la transcription…" autocomplete="off" />
     </div>
+    <div class="crumb" id="crumb"></div>
     <div id="lib" class="lib"></div>
   </section>
 
@@ -346,8 +381,9 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
             <span id="timer">00:00</span><span id="status">prêt</span>
           </div>
           <div id="levelWrap"></div>
-          <input id="docTitle" placeholder="Nom de la séance" style="font:inherit;padding:7px 11px;
-                 border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);min-width:200px" />
+          <input id="docCourse" placeholder="Matière" style="min-width:130px" />
+          <input id="docChapter" placeholder="Chapitre" style="min-width:130px" />
+          <input id="docTitle" placeholder="Nom de la séance" style="min-width:190px" />
         </div>
         <audio id="player" controls hidden></audio>
     </div>
@@ -442,28 +478,116 @@ async function checkEngine() {
 checkEngine();
 
 // ------------------------------------------------------- bibliothèque
+// La bibliothèque est un classement à deux niveaux — matière puis chapitre —
+// et non un arbre libre : un cours A des chapitres, la hiérarchie est connue
+// d'avance. Deux niveaux suffisent et évitent de se perdre dans ses dossiers.
+const lib = { docs: [], course: null, chapter: null, query: "" };
+
 async function loadLibrary() {
-  const { docs } = await (await fetch("/docs")).json();
-  const host = $("lib");
-  if (!docs.length) { host.innerHTML = `<div class="empty">Aucune séance enregistrée.</div>`; return; }
+  lib.docs = (await (await fetch("/docs")).json()).docs;
+  renderLibrary();
+}
+
+const bucket = (d) => (d.course || "").trim() || "Sans matière";
+const chapterOf = (d) => (d.chapter || "").trim() || "Sans chapitre";
+
+function renderLibrary() {
+  if (lib.query.trim()) return renderSearch();
+  const host = $("lib"), crumb = $("crumb");
+  host.className = "lib";
+
+  const inScope = lib.docs.filter((d) =>
+    (lib.course === null || bucket(d) === lib.course) &&
+    (lib.chapter === null || chapterOf(d) === lib.chapter));
+
+  crumb.innerHTML = lib.course === null ? "" :
+    `<button data-lvl="root">Toutes les matières</button><span class="sep">/</span>` +
+    (lib.chapter === null
+      ? `<span class="now">${esc(lib.course)}</span>`
+      : `<button data-lvl="course">${esc(lib.course)}</button><span class="sep">/</span><span class="now">${esc(lib.chapter)}</span>`);
+  for (const b of crumb.querySelectorAll("button"))
+    b.onclick = () => { if (b.dataset.lvl === "root") { lib.course = null; lib.chapter = null; }
+                        else lib.chapter = null; renderLibrary(); };
+
   host.innerHTML = "";
-  for (const d of docs) {
-    const el = document.createElement("article"); el.className = "doc";
-    const when = d.savedAt ? new Date(d.savedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "";
-    el.innerHTML = `<button class="sm ghost del" title="Supprimer">✕</button>
-      <div class="idx">${String(docs.indexOf(d) + 1).padStart(2, "0")}</div>
-      <h3>${esc(d.title)}</h3><div class="meta"><span>${when}</span>
-      <span>${d.blocks} blocs</span>${d.diagrams ? `<span>${d.diagrams} schéma</span>` : ""}
-      ${d.attachments ? `<span>${d.attachments} source</span>` : ""}</div>`;
-    el.onclick = () => openDoc(d.id);
-    el.querySelector(".del").onclick = async (e) => {
-      e.stopPropagation();
-      if (!confirm(`Supprimer « ${d.title} » ? C'est définitif.`)) return;
-      await fetch("/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: d.id }) });
-      loadLibrary();
-    };
+  if (!lib.docs.length) { host.innerHTML = `<div class="empty">Aucune séance enregistrée.</div>`; return; }
+
+  // Niveau courant : on montre les dossiers du niveau suivant, puis les séances
+  // qui n'y sont pas rangées.
+  const key = lib.course === null ? bucket : chapterOf;
+  const groups = new Map();
+  if (lib.chapter === null) {
+    for (const d of inScope) {
+      const k = key(d);
+      const orphan = lib.course === null ? !(d.course || "").trim() : !(d.chapter || "").trim();
+      if (orphan) continue;
+      groups.set(k, (groups.get(k) ?? []).concat(d));
+    }
+  }
+  for (const [name, items] of [...groups].sort((a, b) => a[0].localeCompare(b[0], "fr"))) {
+    const el = document.createElement("article");
+    el.className = "doc folder";
+    el.innerHTML = `<div class="kind">${lib.course === null ? "Matière" : "Chapitre"}</div>
+      <h3>${esc(name)}</h3><div class="count">${items.length} séance${items.length > 1 ? "s" : ""}</div>`;
+    el.onclick = () => { if (lib.course === null) lib.course = name; else lib.chapter = name; renderLibrary(); };
     host.appendChild(el);
   }
+
+  const loose = inScope.filter((d) =>
+    lib.chapter !== null || (lib.course === null ? !(d.course || "").trim() : !(d.chapter || "").trim()));
+  loose.forEach((d, n) => host.appendChild(docCard(d, n + 1)));
+
+  if (!groups.size && !loose.length) host.innerHTML = `<div class="empty">Ce dossier est vide.</div>`;
+}
+
+function docCard(d, n) {
+  const el = document.createElement("article"); el.className = "doc";
+  const when = d.savedAt ? new Date(d.savedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "";
+  const place = [d.course, d.chapter].filter(Boolean).join(" · ");
+  el.innerHTML = `<button class="sm ghost del" title="Supprimer">✕</button>
+    <div class="idx">${String(n).padStart(2, "0")}${place ? " · " + esc(place) : ""}</div>
+    <h3>${esc(d.title)}</h3><div class="meta"><span>${when}</span><span>${d.blocks} blocs</span>
+    ${d.diagrams ? `<span>${d.diagrams} schéma</span>` : ""}${d.attachments ? `<span>${d.attachments} source</span>` : ""}</div>`;
+  el.onclick = () => openDoc(d.id);
+  el.querySelector(".del").onclick = async (e) => {
+    e.stopPropagation();
+    if (!confirm(`Supprimer « ${d.title} » ? C'est définitif.`)) return;
+    await fetch("/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: d.id }) });
+    loadLibrary();
+  };
+  return el;
+}
+
+let searchTimer = null;
+$("q").addEventListener("input", () => {
+  lib.query = $("q").value;
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(renderLibrary, 180);   // on ne relit pas les fichiers à chaque frappe
+});
+
+async function renderSearch() {
+  const host = $("lib"); host.className = "";
+  $("crumb").innerHTML = `<span class="now">Recherche</span><span class="sep">·</span><span>${esc(lib.query)}</span>`;
+  const { results } = await (await fetch(`/search?q=${encodeURIComponent(lib.query)}`)).json();
+  if (!results.length) { host.innerHTML = `<div class="empty">Rien trouvé pour « ${esc(lib.query)} ».</div>`; return; }
+  host.innerHTML = "";
+  for (const r of results) {
+    const el = document.createElement("article"); el.className = "hit";
+    const place = [r.course, r.chapter].filter(Boolean).join(" · ") || "non classé";
+    el.innerHTML = `<div class="ht">${esc(r.title)}</div>
+      <div class="hp"><span>${esc(place)}</span><span>${r.savedAt ? new Date(r.savedAt).toLocaleDateString("fr-FR") : ""}</span></div>
+      ${r.hits.map((h) => `<div class="hs"><span class="hw">${esc(h.where)}</span> ${mark(h.snippet, lib.query)}</div>`).join("")}`;
+    el.onclick = () => openDoc(r.id);
+    host.appendChild(el);
+  }
+}
+
+/** Surligne les mots cherchés dans l'extrait, après échappement. */
+function mark(snippet, query) {
+  const words = query.split(/\s+/).filter((w) => w.length > 2).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  let out = esc(snippet);
+  for (const w of words) out = out.replace(new RegExp(`(${w})`, "gi"), "<em>$1</em>");
+  return out;
 }
 
 async function openDoc(id) {
@@ -472,6 +596,7 @@ async function openDoc(id) {
   Object.assign(state, { id, segments: s.segments ?? [], attachments: s.attachments ?? [],
                          doc: s.doc ?? null, diagrams: s.diagrams ?? [], images: s.images ?? [] });
   $("docTitle").value = s.doc?.title ?? "";
+  $("docCourse").value = s.course ?? ""; $("docChapter").value = s.chapter ?? "";
   $("attachments").innerHTML = "";
   state.attachments.forEach((a, i) => {
     const c = document.createElement("div"); c.className = "att";
@@ -492,6 +617,7 @@ async function openDoc(id) {
 $("newBtn").onclick = () => {
   Object.assign(state, { id: null, segments: [], attachments: [], doc: null, diagrams: [], images: [] });
   $("docTitle").value = ""; $("attachments").innerHTML = "";
+  // La matière et le chapitre restent : on enchaîne en général sur le même cours.
   $("transcript").innerHTML = `<div class="empty">Rien encore.</div>`; $("tStats").hidden = true;
   $("sheet").innerHTML = `<div class="empty">Enregistre une séance ou dépose un document, puis génère les notes.</div>`;
   $("player").hidden = true; $("saveState").textContent = ""; refresh(); show("ses");
@@ -887,16 +1013,18 @@ $("mdBtn").onclick = () => {
 
 // -------------------------------------------------------- persistance
 function markDirty() { state.dirty = true; $("saveBtn").disabled = false; $("saveState").textContent = "non enregistré"; }
-$("docTitle").addEventListener("input", markDirty);
+for (const id of ["docTitle", "docCourse", "docChapter"]) $(id).addEventListener("input", markDirty);
 $("saveBtn").onclick = save;
 async function save() {
   const title = $("docTitle").value.trim() || state.doc?.title || "Séance sans titre";
   if (state.doc) state.doc.title = title;
-  state.id ??= `${slug(title)}-${Date.now().toString(36)}`;
+  const place = [$("docCourse").value, $("docChapter").value].filter((x) => x.trim()).map(slug).join("-");
+  state.id ??= `${place ? place + "-" : ""}${slug(title)}-${Date.now().toString(36)}`;
   try {
     await fetch("/save", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: state.id, doc: state.doc, diagrams: state.diagrams.filter(Boolean),
                              images: state.images.filter(Boolean), attachments: live(),
+                             course: $("docCourse").value.trim(), chapter: $("docChapter").value.trim(),
                              segments: state.segments, savedAt: new Date().toISOString() }) });
     state.dirty = false; $("saveBtn").disabled = true;
     $("saveState").textContent = `enregistré à ${new Date().toLocaleTimeString("fr-FR")}`;
