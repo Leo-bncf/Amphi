@@ -48,6 +48,8 @@ pnpm test
 
 Bibliothèque de séances, enregistrement micro, transcription locale avec horodatages cliquables, import de photos du tableau et de documents, notes éditables, diagrammes Mermaid, export Markdown et impression PDF. Aucun Docker, aucune base : tout tourne sur la machine.
 
+Le système visuel suit **[Hallmark](https://www.usehallmark.com)** (`npx skills add nutlope/hallmark`) : palette OKLCH à une seule teinte d'ancrage, paire typographique Bricolage Grotesque / Cardo vendorisée en local, échelle d'espacement de 4 pt, aucune bande latérale ni dégradé. Les polices sont servies depuis `apps/studio/ui/vendor/fonts/` — pas de CDN, l'app reste lisible sans réseau.
+
 Trois règles de fond, visibles à l'usage :
 - **rien d'inventé** — un bloc dont la source citée ne correspond pas au contenu est écarté, pas affiché ;
 - **pas de section creuse** — si l'enseignant annonce un titre sans rien développer, aucune rubrique n'est créée ;

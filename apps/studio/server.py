@@ -506,8 +506,18 @@ class StudioHandler(AsrHandler):
         if self.path in ("/", "/index.html"):
             self._send_file(STUDIO_DIR / "ui" / "index.html", "text/html; charset=utf-8")
             return
-        if self.path == "/vendor/mermaid.min.js":
-            self._send_file(STUDIO_DIR / "ui" / "vendor" / "mermaid.min.js", "application/javascript")
+        if self.path.startswith("/vendor/"):
+            # Ressources vendorisées : polices, mermaid. Jamais de CDN — l'app doit
+            # rester utilisable dans un amphi au réseau douteux.
+            rel = self.path[len("/vendor/"):]
+            target = (STUDIO_DIR / "ui" / "vendor" / rel).resolve()
+            root = (STUDIO_DIR / "ui" / "vendor").resolve()
+            if root not in target.parents and target != root:
+                self._send(403, {"error": "chemin hors du dossier vendor"})
+                return
+            types = {".js": "application/javascript", ".css": "text/css; charset=utf-8",
+                     ".woff2": "font/woff2", ".woff": "font/woff"}
+            self._send_file(target, types.get(target.suffix, "application/octet-stream"))
             return
         if self.path == "/docs":
             self._send(200, {"docs": list_documents()})
