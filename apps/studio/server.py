@@ -44,6 +44,7 @@ LOG = logging.getLogger("amphi.studio")
 
 MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
 MISTRAL_MODEL = os.environ.get("AMPHI_LLM_MODEL", "mistral-small-latest")
+LOCAL_LLM_MODEL = os.environ.get("AMPHI_LOCAL_LLM", "mlx-community/Qwen2.5-7B-Instruct-4bit")
 
 # Tarifs §11.3, en millièmes d'euro par token.
 EUR_PER_USD = 0.92
@@ -128,6 +129,57 @@ def verify_anchor(block: dict[str, Any], segments: list[dict[str, Any]]) -> dict
     }
 
 
+_local_llm: Any = None
+
+
+def local_llm_available() -> bool:
+    """Le modèle local est-il déjà téléchargé ? On ne déclenche pas le téléchargement ici."""
+    from pathlib import Path as _P
+
+    slug = LOCAL_LLM_MODEL.replace("/", "--")
+    cache = _P.home() / ".cache" / "huggingface" / "hub" / f"models--{slug}"
+    return cache.exists() and not any(cache.rglob("*.incomplete"))
+
+
+def generate_local(transcript: str) -> tuple[dict[str, Any], dict[str, int], float]:
+    """
+    Génération sans compte ni clé — ADR-16, la moitié locale.
+
+    Plus lent et moins fiable qu'un modèle hébergé sur la structure JSON, mais il
+    ne dépend de personne : c'est ce qui permet à l'app de marcher le jour où la
+    clé expire, où le plan n'est pas activé, ou simplement hors ligne.
+    """
+    global _local_llm
+    from mlx_lm import generate, load
+
+    if _local_llm is None:
+        LOG.info("chargement du modèle local %s", LOCAL_LLM_MODEL)
+        _local_llm = load(LOCAL_LLM_MODEL)
+    model, tokenizer = _local_llm
+
+    prompt = tokenizer.apply_chat_template(
+        [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": transcript},
+        ],
+        add_generation_prompt=True,
+    )
+    started = time.perf_counter()
+    raw = generate(model, tokenizer, prompt=prompt, max_tokens=4096, verbose=False)
+    latency_ms = (time.perf_counter() - started) * 1000
+
+    # Les petits modèles encadrent volontiers leur JSON de balises markdown.
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end == -1:
+        raise ValueError("le modèle local n'a pas produit de JSON exploitable")
+
+    return json.loads(text[start : end + 1]), {"prompt_tokens": 0, "completion_tokens": 0}, latency_ms
+
+
 def call_mistral(api_key: str, transcript: str) -> tuple[dict[str, Any], dict[str, int], float]:
     body = json.dumps(
         {
@@ -176,18 +228,6 @@ class StudioHandler(AsrHandler):
             super().do_POST()
             return
 
-        api_key = os.environ.get("MISTRAL_API_KEY", "")
-        if api_key == "":
-            self._send(
-                400,
-                {
-                    "error": "MISTRAL_API_KEY absente. La transcription marche sans, "
-                    "les notes non. Clé gratuite sur console.mistral.ai, puis relance "
-                    "avec MISTRAL_API_KEY=... "
-                },
-            )
-            return
-
         length = int(self.headers.get("Content-Length") or 0)
         try:
             segments = json.loads(self.rfile.read(length))["segments"]
@@ -201,16 +241,49 @@ class StudioHandler(AsrHandler):
 
         transcript = "\n".join(f"[s{i}] {s['text']}" for i, s in enumerate(segments))
 
-        try:
-            doc, usage, latency_ms = call_mistral(api_key, transcript)
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", "replace")[:300]
-            self._send(502, {"error": f"Mistral HTTP {exc.code} : {detail}"})
-            return
-        except Exception as exc:  # noqa: BLE001
-            LOG.exception("génération de notes")
-            self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
-            return
+        # Ordre de préférence : Mistral s'il répond, sinon le modèle local. Un 429
+        # de Mistral n'est pas une panne du produit — c'est un basculement.
+        api_key = os.environ.get("MISTRAL_API_KEY", "")
+        engine = "aucun"
+        doc = usage = None
+        latency_ms = 0.0
+        problems: list[str] = []
+
+        if api_key != "":
+            try:
+                doc, usage, latency_ms = call_mistral(api_key, transcript)
+                engine = MISTRAL_MODEL
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", "replace")[:200]
+                if exc.code == 429:
+                    problems.append(
+                        "Mistral refuse l'inférence (429). La clé est valide mais le plan "
+                        "n'est pas actif : vérifie ton numéro de téléphone sur console.mistral.ai."
+                    )
+                else:
+                    problems.append(f"Mistral HTTP {exc.code} : {detail}")
+            except Exception as exc:  # noqa: BLE001
+                problems.append(f"Mistral : {type(exc).__name__} {exc}")
+        else:
+            problems.append("MISTRAL_API_KEY absente.")
+
+        if doc is None:
+            if not local_llm_available():
+                self._send(
+                    503,
+                    {
+                        "error": " ".join(problems)
+                        + f" Et le modèle local ({LOCAL_LLM_MODEL}) n'est pas encore téléchargé."
+                    },
+                )
+                return
+            try:
+                doc, usage, latency_ms = generate_local(transcript)
+                engine = LOCAL_LLM_MODEL.split("/")[-1] + " (local)"
+            except Exception as exc:  # noqa: BLE001
+                LOG.exception("génération locale")
+                self._send(500, {"error": " ".join(problems) + f" Modèle local : {exc}"})
+                return
 
         # Ancrage vérifié bloc par bloc. Ce qui ne passe pas n'est pas affiché.
         kept, rejected = [], 0
@@ -239,16 +312,31 @@ class StudioHandler(AsrHandler):
                 "blocks": kept,
                 "glossary": glossary,
                 "rejectedBlocks": rejected,
-                "model": MISTRAL_MODEL,
-                "costEuros": f"{cost / 1000:.4f} €",
+                "model": engine,
+                "costEuros": "0,0000 € (local)" if usage.get("prompt_tokens", 0) == 0 else f"{cost / 1000:.4f} €",
+                "fallbackNote": " ".join(problems) if problems and engine != MISTRAL_MODEL else None,
                 "latencyMs": round(latency_ms),
                 "usage": usage,
             },
         )
 
 
+def load_dotenv() -> None:
+    """Charge le .env de la racine du dépôt. Il n'est jamais suivi par git."""
+    env_file = STUDIO_DIR.parent.parent / ".env"
+    if not env_file.exists():
+        return
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line == "" or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip())
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s")
+    load_dotenv()
     port = int(os.environ.get("PORT", "8765"))
     model = os.environ.get("AMPHI_ASR_MODEL", "mlx-community/whisper-large-v3-turbo")
 
