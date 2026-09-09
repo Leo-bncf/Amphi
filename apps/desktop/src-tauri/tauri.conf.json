@@ -3,7 +3,9 @@
   "productName": "Amphi",
   "version": "0.1.0",
   "identifier": "pro.amphi.studio",
-  "build": { "frontendDist": "../dist" },
+  "build": {
+    "frontendDist": "../dist"
+  },
   "app": {
     "windows": [
       {
@@ -18,12 +20,18 @@
     "security": {
       "csp": null,
       "capabilities": []
-    }
+    },
+    "withGlobalTauri": true
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "app"],
-    "icon": ["icons/icon.png"],
+    "targets": [
+      "dmg",
+      "app"
+    ],
+    "icon": [
+      "icons/icon.png"
+    ],
     "category": "Education",
     "shortDescription": "Notes de cours",
     "longDescription": "Enregistre le cours, le transcrit sur ta machine et en tire des notes structurées et traçables."

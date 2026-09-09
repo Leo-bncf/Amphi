@@ -13,6 +13,12 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# Liaison a whisper.cpp. Metal sur Apple Silicon, CPU ailleurs — c'est ce qui
+# permet a chaque etudiant de transcrire chez lui a vitesse native.
+whisper-rs = { version = "0.14", default-features = false, features = ["metal"] }
+ureq = "2"
+base64 = "0.22"
+
 # La compilation par defaut de Rust est lente a l'execution ; on optimise le
 # binaire livre, la transcription en depend directement.
 [profile.release]

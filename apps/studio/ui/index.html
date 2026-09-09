@@ -634,8 +634,71 @@ function applySolo(on) {
 $("soloBtn").onclick = () => applySolo(!$("workspace").classList.contains("solo"));
 try { applySolo(localStorage.getItem(SOLO_KEY) === "1"); } catch { applySolo(false); }
 
+// ─────────────────────── moteur natif (application) ───────────────────────
+//
+// Dans l'app, la transcription se fait ici, sur la machine de l'étudiant, à
+// vitesse native. Dans le navigateur, elle part au serveur. L'interface ne
+// suppose rien : elle demande ce dont la machine est capable et s'adapte.
+const T = globalThis.__TAURI__;
+const native = { available: false, model: false, sizeMb: 0 };
+
+async function probeNative() {
+  if (!T?.core?.invoke) return;
+  try {
+    const info = await T.core.invoke("host_info");
+    native.available = !!info.native_asr;
+    native.model = !!info.model_present;
+    native.sizeMb = info.model_size_mb ?? 0;
+  } catch { /* on reste sur le serveur */ }
+}
+
+/** Décode l'enregistrement en PCM 16 bits mono 16 kHz, ce qu'attend whisper.cpp. */
+async function blobToPcm16(blob) {
+  const ctx = new AudioContext({ sampleRate: 16000 });
+  const audio = await ctx.decodeAudioData(await blob.arrayBuffer());
+  await ctx.close();
+  const float = audio.getChannelData(0);
+  const pcm = new Int16Array(float.length);
+  for (let i = 0; i < float.length; i++) {
+    const v = Math.max(-1, Math.min(1, float[i]));
+    pcm[i] = v < 0 ? v * 32768 : v * 32767;
+  }
+  // Conversion par tranches : passer dix millions d'octets d'un coup à
+  // String.fromCharCode fait déborder la pile.
+  const bytes = new Uint8Array(pcm.buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 32768) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
+  }
+  return btoa(binary);
+}
+
+async function ensureModel() {
+  if (native.model) return true;
+  if (!confirm("Le moteur de transcription doit télécharger son modèle une fois : "
+    + "574 Mo, puis tout fonctionne hors ligne et sans rien payer.\n\nLancer le téléchargement ?")) return false;
+  const un = await T.event.listen("model-progress", (e) => {
+    $("status").textContent = `téléchargement du modèle — ${e.payload} %`;
+  });
+  try {
+    await T.core.invoke("download_model");
+    native.model = true;
+    return true;
+  } catch (e) {
+    $("status").innerHTML = `<span class="err">téléchargement échoué : ${esc(String(e))}</span>`;
+    return false;
+  } finally { un(); }
+}
+
 async function checkEngine() {
   try {
+    await probeNative();
+    if (native.available) {
+      $("engine").textContent = native.model
+        ? `moteur local · whisper turbo · ${native.sizeMb} Mo`
+        : "moteur local — modèle à télécharger";
+      return;
+    }
     const h = await (await fetch(api("/health"))).json();
     $("engine").textContent = h.warm ? `${h.model.split("/").pop()} · ${h.batteryPercent === null ? "secteur" : h.batteryPercent + "%"}` : "chargement…";
     if (!h.warm) setTimeout(checkEngine, 2000);
@@ -1024,9 +1087,23 @@ async function transcribePart(part, mime) {
     const tail = state.segments.slice(-6).map((s) => s.text).join(" ").replace(/\s+/g, " ").slice(-400);
     if (tail) headers["X-Previous-Text"] = tail;
 
-    const r = await fetch(api("/transcribe"), { method: "POST", body: part.blob, headers });
-    const res = await r.json();
-    if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
+    let res;
+    if (native.available) {
+      // Transcription ici même : gratuite, hors ligne, et l'audio ne quitte
+      // pas la machine de l'étudiant.
+      if (!(await ensureModel())) throw new Error("modèle indisponible");
+      const pcm = await blobToPcm16(part.blob);
+      res = await T.core.invoke("transcribe_native", {
+        pcmBase64: pcm,
+        language: lang && lang !== "auto" ? lang : null,
+        prompt: [tail, state.lexicon?.length ? "Termes du cours : " + state.lexicon.slice(0, 40).join(", ") : ""]
+          .filter(Boolean).join(" ").slice(-500) || null,
+      });
+    } else {
+      const r = await fetch(api("/transcribe"), { method: "POST", body: part.blob, headers });
+      res = await r.json();
+      if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
+    }
     // Les temps reviennent relatifs à la partie : on les replace sur la
     // timeline de la séance avant de les fusionner.
     for (const seg of res.segments) {

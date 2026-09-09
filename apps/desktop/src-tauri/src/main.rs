@@ -7,24 +7,77 @@
 // vingtième de la vitesse du moteur natif.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod whisper;
+
+use base64::Engine;
 use serde::Serialize;
+use tauri::Emitter;
 
 #[derive(Serialize)]
 struct HostInfo {
     platform: &'static str,
     arch: &'static str,
-    /// Faux tant que le moteur natif n'est pas branché : l'interface doit
-    /// pouvoir basculer sur le serveur sans supposer que l'app sait tout faire.
+    /// L'interface s'en sert pour choisir : transcrire ici, ou envoyer au
+    /// serveur. Elle ne suppose jamais que l'app sait tout faire.
     native_asr: bool,
+    model_present: bool,
+    model_size_mb: u64,
 }
 
 #[tauri::command]
 fn host_info() -> HostInfo {
+    let model = whisper::model_state();
     HostInfo {
         platform: std::env::consts::OS,
         arch: std::env::consts::ARCH,
-        native_asr: false,
+        native_asr: true,
+        model_present: model.present,
+        model_size_mb: model.size_mb,
     }
+}
+
+/// Télécharge le modèle en émettant l'avancement — 574 Mo, il faut le montrer.
+#[tauri::command]
+async fn download_model(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut last = 0u64;
+        whisper::download_model(|done, total| {
+            let pct = if total > 0 { done * 100 / total } else { 0 };
+            if pct != last {
+                last = pct;
+                let _ = app.emit("model-progress", pct);
+            }
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Transcrit du PCM 16 bits mono 16 kHz, encodé en base64.
+///
+/// Le navigateur décode lui-même l'enregistrement avec `AudioContext` : c'est
+/// gratuit, déjà présent, et ça évite d'embarquer ffmpeg dans l'application.
+#[tauri::command]
+async fn transcribe_native(
+    pcm_base64: String,
+    language: Option<String>,
+    prompt: Option<String>,
+) -> Result<whisper::TranscriptOut, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(pcm_base64.as_bytes())
+            .map_err(|e| format!("audio illisible : {e}"))?;
+        if bytes.len() % 2 != 0 {
+            return Err("flux PCM tronqué".into());
+        }
+        let samples: Vec<i16> = bytes
+            .chunks_exact(2)
+            .map(|c| i16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        whisper::transcribe(&samples, language.as_deref(), prompt.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Adresse du serveur de la promo.
@@ -93,7 +146,7 @@ fn main() {
             println!("Amphi — mot de passe : {}", if password.is_empty() { "aucun" } else { "configuré" });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![host_info])
+        .invoke_handler(tauri::generate_handler![host_info, download_model, transcribe_native])
         .run(tauri::generate_context!())
         .expect("démarrage de la fenêtre Amphi");
 }

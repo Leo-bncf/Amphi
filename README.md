@@ -13,7 +13,7 @@ Conçu pour une promo — 10 à 30 personnes, ~30 h de cours par semaine — pou
 | M0 | Architecture, coûts, décisions | ✅ validé |
 | **M1** | Enregistrement → ASR → notes ancrées → lecture horodatée | ✅ démontrable |
 | M1+ | Import photos/documents, notes éditables, diagrammes Mermaid | ✅ démontrable |
-| M2 | Édition collaborative, Mermaid, Excalidraw | à venir |
+| **M2** | Application de bureau Tauri, transcription native embarquée | 🚧 en cours |
 | M3 | Multi-appareils, consensus, affichage des désaccords | à venir |
 | M4 | Import ICS, recherche sémantique | à venir |
 | M5 | Slides et photos, flashcards, exports | à venir |
@@ -60,6 +60,24 @@ La clé `MISTRAL_API_KEY` va dans un `.env` à la racine (non suivi par git). Sa
 ```bash
 ./bench/.venv/bin/python apps/studio/test_anchors.py   # 11 cas sur la vérification d'ancrage
 ```
+
+### Application de bureau
+
+```bash
+cd apps/desktop/src-tauri && cargo build --release     # ~1 min, cmake requis
+```
+
+Le paquet est dans `apps/desktop/dist-app/Amphi.app`. L'adresse du serveur et
+le mot de passe se règlent dans `~/Library/Application Support/Amphi/` —
+`server.txt` et `password.txt` — donc chaque étudiant pointe la carte sans
+recompilation.
+
+**Pourquoi une app et pas une page web.** Mesuré sur la même machine et le même
+audio : dans le navigateur, `whisper-base` en WebGPU atteint 3,9× le temps réel
+et produit une sortie inexploitable ; `large-v3-turbo`, le seul qui préserve la
+qualité, tomberait vers 0,5×. Le moteur natif fait **9,9×** avec ce même grand
+modèle. Un facteur vingt, qui décide si un étudiant transcrit chez lui
+gratuitement ou fait payer le serveur.
 
 ### Banc de mesure Whisper
 

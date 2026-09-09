@@ -1,0 +1,225 @@
+error: 'rustfmt' is not installed for the toolchain 'stable-aarch64-apple-darwin'.
+help: run `rustup component add rustfmt` to install it
+Failed to run rustfmt: Internal rustfmt error (non-fatal, continuing)
+running: cd "/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/build" && CMAKE_PREFIX_PATH="" LC_ALL="C" "cmake" "-Wdev" "--debug-output" "/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/" "-B" "/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/build" "-DCMAKE_OSX_ARCHITECTURES=arm64" "-DBUILD_SHARED_LIBS=OFF" "-DWHISPER_ALL_WARNINGS=OFF" "-DWHISPER_ALL_WARNINGS_3RD_PARTY=OFF" "-DWHISPER_BUILD_TESTS=OFF" "-DWHISPER_BUILD_EXAMPLES=OFF" "-DGGML_METAL=ON" "-DGGML_METAL_NDEBUG=ON" "-DGGML_METAL_EMBED_LIBRARY=ON" "-DGGML_OPENMP=OFF" "-DCMAKE_INSTALL_PREFIX=/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out" "-DCMAKE_C_FLAGS= -ffunction-sections -fdata-sections -fPIC --target=arm64-apple-macosx -mmacosx-version-min=26.5 -w" "-DCMAKE_C_COMPILER=/usr/bin/cc" "-DCMAKE_CXX_FLAGS= -ffunction-sections -fdata-sections -fPIC --target=arm64-apple-macosx -mmacosx-version-min=26.5 -w" "-DCMAKE_CXX_COMPILER=/usr/bin/c++" "-DCMAKE_ASM_FLAGS= -ffunction-sections -fdata-sections -fPIC --target=arm64-apple-macosx -mmacosx-version-min=26.5 -w" "-DCMAKE_ASM_COMPILER=/usr/bin/cc" "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_VERBOSE_MAKEFILE:BOOL=ON"
+The dev option is deprecated.  Use -Wauthor instead.
+CMake Warning (deprecated) at CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+This warning is for project developers.  Use -Wno-author or -Wno-deprecated
+to suppress it.
+
+   Called from: [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/CMakeLists.txt
+CMake Warning (policy) at /Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineCompiler.cmake:127 (set):
+  Policy CMP0126 is not set: set(CACHE) does not remove a normal variable of
+  the same name.  Run "cmake --help-policy CMP0126" for policy details.  Use
+  the cmake_policy command to set the policy and suppress this warning.
+
+  For compatibility with older versions of CMake, normal variable
+  "CMAKE_C_COMPILER" will be removed from the current scope.
+Call Stack (most recent call first):
+  /Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineCCompiler.cmake:67 (_cmake_find_compiler_path)
+  CMakeLists.txt:2 (project)
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+   Called from: [3]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/CMakeLists.txt
+                [2]	/Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineCCompiler.cmake
+                [1]	/Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineCompiler.cmake
+CMake Warning (policy) at /Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineCompiler.cmake:127 (set):
+  Policy CMP0126 is not set: set(CACHE) does not remove a normal variable of
+  the same name.  Run "cmake --help-policy CMP0126" for policy details.  Use
+  the cmake_policy command to set the policy and suppress this warning.
+
+  For compatibility with older versions of CMake, normal variable
+  "CMAKE_CXX_COMPILER" will be removed from the current scope.
+Call Stack (most recent call first):
+  /Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineCXXCompiler.cmake:71 (_cmake_find_compiler_path)
+  CMakeLists.txt:2 (project)
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+   Called from: [3]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/CMakeLists.txt
+                [2]	/Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineCXXCompiler.cmake
+                [1]	/Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineCompiler.cmake
+CMake Warning (policy) at /Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineCompilerABI.cmake:123 (try_compile):
+  Policy CMP0066 is not set: Honor per-config flags in try_compile()
+  source-file signature.  Run "cmake --help-policy CMP0066" for policy
+  details.  Use the cmake_policy command to set the policy and suppress this
+  warning.
+
+  For compatibility with older versions of CMake, try_compile is not honoring
+  caller config-specific compiler flags (e.g.  CMAKE_C_FLAGS_DEBUG) in the
+  test project.
+Call Stack (most recent call first):
+  /Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)
+  CMakeLists.txt:2 (project)
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+   Called from: [3]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/CMakeLists.txt
+                [2]	/Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeTestCCompiler.cmake
+                [1]	/Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineCompilerABI.cmake
+CMake Warning (policy) at /Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineCompilerABI.cmake:123 (try_compile):
+  Policy CMP0066 is not set: Honor per-config flags in try_compile()
+  source-file signature.  Run "cmake --help-policy CMP0066" for policy
+  details.  Use the cmake_policy command to set the policy and suppress this
+  warning.
+
+  For compatibility with older versions of CMake, try_compile is not honoring
+  caller config-specific compiler flags (e.g.  CMAKE_C_FLAGS_DEBUG) in the
+  test project.
+Call Stack (most recent call first):
+  /Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)
+  CMakeLists.txt:2 (project)
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+   Called from: [3]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/CMakeLists.txt
+                [2]	/Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeTestCXXCompiler.cmake
+                [1]	/Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineCompilerABI.cmake
+   Entering             /Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml
+   Called from: [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/CMakeLists.txt
+   Entering             /Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src
+   Called from: [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/CMakeLists.txt
+   Entering             /Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/ggml-cpu
+   Called from: [2]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+                [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+   Returning to         /Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src
+   Called from: [2]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+                [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+   Entering             /Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/ggml-blas
+   Called from: [2]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+                [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+   Returning to         /Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src
+   Called from: [2]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+                [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+   Entering             /Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/ggml-metal
+   Called from: [2]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+                [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+CMake Warning (policy) at /Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineCompiler.cmake:127 (set):
+  Policy CMP0126 is not set: set(CACHE) does not remove a normal variable of
+  the same name.  Run "cmake --help-policy CMP0126" for policy details.  Use
+  the cmake_policy command to set the policy and suppress this warning.
+
+  For compatibility with older versions of CMake, normal variable
+  "CMAKE_ASM_COMPILER" will be removed from the current scope.
+Call Stack (most recent call first):
+  /Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineASMCompiler.cmake:64 (_cmake_find_compiler_path)
+  ggml/src/ggml-metal/CMakeLists.txt:31 (enable_language)
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+   Called from: [3]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/ggml-metal/CMakeLists.txt
+                [2]	/Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineASMCompiler.cmake
+                [1]	/Users/leo/amphi/bench/.venv/lib/python3.9/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeDetermineCompiler.cmake
+   Returning to         /Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src
+   Called from: [2]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+                [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+   Returning to         /Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml
+   Called from: [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/CMakeLists.txt
+   Returning to         /Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp
+   Called from: [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/CMakeLists.txt
+   Entering             /Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/src
+   Called from: [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/CMakeLists.txt
+   Returning to         /Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp
+   Called from: [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/CMakeLists.txt
+CMake Warning (policy) in ggml/CMakeLists.txt:
+  Policy CMP0200 is not set: Location and configuration selection for
+  imported targets is more consistent.  Run "cmake --help-policy CMP0200" for
+  policy details.  Use the cmake_policy command to set the policy and
+  suppress this warning.
+
+  Configuration selection for imported target "Threads::Threads" selected
+  configuration "(none)", but would select configuration "RELEASE" under the
+  NEW policy.
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+CMake Warning (policy) in CMakeLists.txt:
+  Policy CMP0082 is not set: Install rules from add_subdirectory() are
+  interleaved with those in caller.  Run "cmake --help-policy CMP0082" for
+  policy details.  Use the cmake_policy command to set the policy and
+  suppress this warning.
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+   Called from: [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/CMakeLists.txt
+CMake Warning (policy) at ggml/src/CMakeLists.txt:205 (add_library):
+  Policy CMP0156 is not set: De-duplicate libraries on link lines based on
+  linker capabilities.  Run "cmake --help-policy CMP0156" for policy details.
+  Use the cmake_policy command to set the policy and suppress this warning.
+
+  Since the policy is not set, legacy libraries de-duplication strategy will
+  be applied.
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+   Called from: [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+CMake Warning (policy) at ggml/src/CMakeLists.txt:239 (add_library):
+  Policy CMP0156 is not set: De-duplicate libraries on link lines based on
+  linker capabilities.  Run "cmake --help-policy CMP0156" for policy details.
+  Use the cmake_policy command to set the policy and suppress this warning.
+
+  Since the policy is not set, legacy libraries de-duplication strategy will
+  be applied.
+Call Stack (most recent call first):
+  ggml/src/ggml-cpu/CMakeLists.txt:8 (ggml_add_backend_library)
+  ggml/src/CMakeLists.txt:299 (ggml_add_cpu_backend_variant_impl)
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+   Called from: [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+CMake Warning (policy) at ggml/src/CMakeLists.txt:222 (add_library):
+  Policy CMP0156 is not set: De-duplicate libraries on link lines based on
+  linker capabilities.  Run "cmake --help-policy CMP0156" for policy details.
+  Use the cmake_policy command to set the policy and suppress this warning.
+
+  Since the policy is not set, legacy libraries de-duplication strategy will
+  be applied.
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+   Called from: [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/CMakeLists.txt
+CMake Warning (policy) at ggml/src/CMakeLists.txt:239 (add_library):
+  Policy CMP0156 is not set: De-duplicate libraries on link lines based on
+  linker capabilities.  Run "cmake --help-policy CMP0156" for policy details.
+  Use the cmake_policy command to set the policy and suppress this warning.
+
+  Since the policy is not set, legacy libraries de-duplication strategy will
+  be applied.
+Call Stack (most recent call first):
+  ggml/src/ggml-blas/CMakeLists.txt:14 (ggml_add_backend_library)
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+   Called from: [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/ggml-blas/CMakeLists.txt
+CMake Warning (policy) at ggml/src/CMakeLists.txt:239 (add_library):
+  Policy CMP0156 is not set: De-duplicate libraries on link lines based on
+  linker capabilities.  Run "cmake --help-policy CMP0156" for policy details.
+  Use the cmake_policy command to set the policy and suppress this warning.
+
+  Since the policy is not set, legacy libraries de-duplication strategy will
+  be applied.
+Call Stack (most recent call first):
+  ggml/src/ggml-metal/CMakeLists.txt:7 (ggml_add_backend_library)
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+   Called from: [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/ggml/src/ggml-metal/CMakeLists.txt
+CMake Warning (policy) at src/CMakeLists.txt:83 (add_library):
+  Policy CMP0156 is not set: De-duplicate libraries on link lines based on
+  linker capabilities.  Run "cmake --help-policy CMP0156" for policy details.
+  Use the cmake_policy command to set the policy and suppress this warning.
+
+  Since the policy is not set, legacy libraries de-duplication strategy will
+  be applied.
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+   Called from: [1]	/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/whisper.cpp/src/CMakeLists.txt
+running: cd "/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/build" && LC_ALL="C" "cmake" "--build" "/Users/leo/amphi/apps/desktop/src-tauri/target/release/build/whisper-rs-sys-84253747ade66ce0/out/build" "--target" "install" "--config" "Release" "--parallel" "10"

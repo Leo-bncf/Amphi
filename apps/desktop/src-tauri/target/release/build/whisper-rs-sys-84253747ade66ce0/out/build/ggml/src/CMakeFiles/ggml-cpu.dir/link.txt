@@ -1,0 +1,2 @@
+/usr/bin/ar qc libggml-cpu.a "CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.c.o" "CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.cpp.o" "CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu-aarch64.cpp.o" "CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu-hbm.cpp.o" "CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu-quants.c.o" "CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu-traits.cpp.o" "CMakeFiles/ggml-cpu.dir/ggml-cpu/amx/amx.cpp.o" "CMakeFiles/ggml-cpu.dir/ggml-cpu/amx/mmq.cpp.o"
+/usr/bin/ranlib libggml-cpu.a
