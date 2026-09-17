@@ -82,7 +82,7 @@ header .mark { font-family: var(--font-data); font-size: var(--t-sm); font-weigh
 .tabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
 header .spacer { flex: 1; }
 #saveState { color: var(--mark); font-size: var(--t-sm); }
-#engine { color: var(--neutral); font-size: var(--t-xs); font-family: var(--font-data); }
+#engine { color: var(--neutral); font-size: var(--t-xs); font-family: var(--font-data); border: 0; background: none; padding: 2px 0; cursor: pointer; } #engine:hover { color: var(--accent); }
 
 main { max-width: 1680px; margin: 0 auto; padding: var(--s-lg) var(--s-lg) var(--s-3xl); }
 .hidden { display: none !important; }
@@ -509,7 +509,7 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
 <header>
   <span class="mark">Amphi</span>
   <div class="tabs"><button id="tabLib" class="on">Bibliothèque</button><button id="tabSes">Séance</button></div>
-  <span class="spacer"></span><span id="saveState"></span><span id="engine">connexion…</span>
+  <span class="spacer"></span><span id="saveState"></span><button id="engine" type="button" title="Ouvrir la connexion">connexion…</button>
 </header>
 
 <main>
@@ -617,6 +617,56 @@ const $ = (id) => document.getElementById(id);
 const API = (globalThis.AMPHI_API ?? "").replace(/\/$/, "");
 const api = (path) => API + path;
 
+// Browser sessions use a short-lived bearer token kept only in sessionStorage.
+// Desktop builds may still inject AMPHI_TOKEN/AMPHI_AUTH as before.
+let browserToken = "";
+try { browserToken = sessionStorage.getItem("amphi.auth.token") || ""; } catch {}
+if (browserToken && !globalThis.AMPHI_TOKEN) globalThis.AMPHI_TOKEN = browserToken;
+
+function loginDialog() {
+  return new Promise((resolve) => {
+    const back = document.createElement("div"); back.className = "modal";
+    back.innerHTML = `<div class="sheetlet"><div class="mt">Connexion</div>
+      <div class="mn">Connecte-toi pour accéder à tes séances et à ton agenda.</div>
+      <label>Identifiant<input id="loginUser" autocomplete="username" required></label>
+      <label>Mot de passe<input id="loginPass" type="password" autocomplete="current-password" required></label>
+      <div id="loginError" class="err" role="alert" hidden></div>
+      <div class="ma"><button id="loginCancel">Annuler</button><button id="loginSubmit" class="primary">Se connecter</button></div></div>`;
+    document.body.appendChild(back);
+    const user = back.querySelector("#loginUser"), pass = back.querySelector("#loginPass"), error = back.querySelector("#loginError");
+    const close = (value) => { back.remove(); resolve(value); };
+    back.querySelector("#loginCancel").onclick = () => close(null);
+    back.onclick = (e) => { if (e.target === back) close(null); };
+    back.querySelector("#loginSubmit").onclick = async () => {
+      error.hidden = true;
+      try {
+        const r = await fetch(api("/auth/login"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: user.value, password: pass.value }) });
+        const result = await r.json(); if (!r.ok || !result.token) throw new Error(result.error || "Identifiants invalides");
+        try { sessionStorage.setItem("amphi.auth.token", result.token); } catch {}
+        globalThis.AMPHI_TOKEN = result.token; close(result.user);
+      } catch (e) { error.textContent = e.message; error.hidden = false; }
+    };
+    pass.onkeydown = (e) => { if (e.key === "Enter") back.querySelector("#loginSubmit").click(); };
+    user.focus();
+  });
+}
+
+async function refreshAuthStatus() {
+  if (!API) return;
+  try {
+    const r = await fetch(api("/auth/me"));
+    if (r.ok) { const { user } = await r.json(); $("engine").textContent = user?.displayName || user?.username || "connecté"; $("engine").title = "Se déconnecter"; return true; }
+  } catch {}
+  $("engine").textContent = "connexion"; $("engine").title = "Ouvrir la connexion"; return false;
+}
+$("engine").onclick = async () => {
+  if (await refreshAuthStatus()) {
+    try { await fetch(api("/auth/logout"), { method: "POST" }); sessionStorage.removeItem("amphi.auth.token"); } catch {}
+    delete globalThis.AMPHI_TOKEN; $("engine").textContent = "connexion";
+  } else if (await loginDialog()) { await refreshAuthStatus(); loadLibrary().catch(() => {}); }
+};
+refreshAuthStatus();
+
 // Must change only when request/response semantics change, not with Whisper.
 const AMPHI_CLIENT_PROTOCOL = 1;
 let compatibility = { compatible: true };
@@ -633,17 +683,19 @@ async function checkCompatibility() {
 }
 
 // L'app desktop injecte un bearer token. Le Basic partagé reste accepté pour
-// la migration des anciennes installations.
-if ((globalThis.AMPHI_TOKEN || globalThis.AMPHI_AUTH) && API) {
+// la migration des anciennes installations. Le token est lu à chaque requête
+// afin qu'une connexion effectuée après le chargement de la page soit effective.
+if (API) {
   const nativeFetch = globalThis.fetch.bind(globalThis);
-  const header = globalThis.AMPHI_TOKEN
-    ? "Bearer " + globalThis.AMPHI_TOKEN
-    : "Basic " + btoa("amphi:" + globalThis.AMPHI_AUTH);
   globalThis.fetch = (input, init = {}) => {
     const url = typeof input === "string" ? input : input?.url ?? "";
     if (!url.startsWith(API)) return nativeFetch(input, init);
     const headers = new Headers(init.headers ?? {});
-    headers.set("Authorization", header);
+    const token = globalThis.AMPHI_TOKEN;
+    const basic = globalThis.AMPHI_AUTH;
+    if (token) headers.set("Authorization", "Bearer " + token);
+    else if (basic) headers.set("Authorization", "Basic " + btoa("amphi:" + basic));
+    else headers.delete("Authorization");
     return nativeFetch(input, { ...init, headers, credentials: "omit" });
   };
 }
