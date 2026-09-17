@@ -9,6 +9,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Prepare desktop frontend
+        shell: bash
+        run: |
+          mkdir -p apps/desktop/dist
+          cp apps/studio/ui/index.html apps/desktop/dist/index.html
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version '^2' --locked
       - name: Build macOS bundle
