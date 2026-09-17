@@ -630,8 +630,7 @@ function loginDialog() {
       <div class="mn">Connecte-toi pour accéder à tes séances et à ton agenda.</div>
       <label>Identifiant<input id="loginUser" autocomplete="username" required></label>
       <label>Mot de passe<input id="loginPass" type="password" autocomplete="current-password" required></label>
-      <label>Code d'invitation (pour une première inscription)<input id="inviteCode" autocomplete="one-time-code"></label>
-      <label id="displayNameWrap" hidden>Nom affiché<input id="displayName" autocomplete="name"></label>
+      <label id="displayNameWrap">Nom affiché<input id="displayName" autocomplete="name"></label>
       <div id="loginError" class="err" role="alert" hidden></div>
       <div class="ma"><button id="loginCancel">Annuler</button><button id="signupSubmit">Créer mon compte</button><button id="loginSubmit" class="primary">Se connecter</button></div></div>`;
     document.body.appendChild(back);
@@ -642,7 +641,7 @@ function loginDialog() {
     back.querySelector("#signupSubmit").onclick = async () => {
       error.hidden = true;
       try {
-        const r = await fetch(api("/auth/signup"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: back.querySelector("#inviteCode").value, password: pass.value, displayName: back.querySelector("#displayName").value }) });
+        const r = await fetch(api("/auth/signup"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: user.value, password: pass.value, displayName: back.querySelector("#displayName").value }) });
         const result = await r.json(); if (!r.ok || !result.token) throw new Error(result.error || "Inscription impossible");
         try { sessionStorage.setItem("amphi.auth.token", result.token); } catch {}
         globalThis.AMPHI_TOKEN = result.token; close(result.user);

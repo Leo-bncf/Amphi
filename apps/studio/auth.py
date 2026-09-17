@@ -99,22 +99,22 @@ def admin_invite(username: str, display_name: str = "", role: str = "contributor
         # password remains for backwards-compatible desktop/admin bootstrap; new students use code signup.
         return {"username": username, "password": password, "inviteCode": code, "user": public_user(users[username])}
 
-def signup(code: str, password: str, display_name: str = "") -> dict | None:
-    """Consume a single-use invitation and issue the first bearer token."""
-    if not isinstance(code, str) or len(code) < 20 or not isinstance(password, str) or len(password) < 10:
+def signup(username: str, password: str, display_name: str = "") -> dict | None:
+    """Create a student account and issue its first bearer token."""
+    username = username.strip().lower()
+    display_name = display_name.strip()[:120] or username
+    if not username or len(username) > 80 or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789._-" for c in username):
+        return None
+    if not isinstance(password, str) or len(password) < 10:
         return None
     with _LOCK:
-        key = hashlib.sha256(code.encode()).hexdigest()
-        invites = _load(_invites_path()); invite = invites.get(key)
-        if not isinstance(invite, dict) or invite.get("used") or time.time() - float(invite.get("created", 0)) > 7 * 86400:
+        users = _load(_users_path())
+        if username in users:
             return None
-        users = _load(_users_path()); user = users.get(invite.get("username"))
-        if not isinstance(user, dict) or user.get("disabled"):
-            return None
-        user["password"] = _hash_password(password)
-        if display_name.strip(): user["displayName"] = display_name.strip()[:120]
-        invite["used"] = True; invite["usedAt"] = time.time()
-        _save(_users_path(), users); _save(_invites_path(), invites)
+        user = {"id": secrets.token_hex(16), "displayName": display_name,
+                "role": "contributor", "disabled": False, "password": _hash_password(password)}
+        users[username] = user
+        _save(_users_path(), users)
         raw = secrets.token_urlsafe(32); tokens = _load(_tokens_path())
         tokens[hashlib.sha256(raw.encode()).hexdigest()] = {"user": user["id"], "expires": time.time() + _TOKEN_TTL}
         _save(_tokens_path(), tokens)
