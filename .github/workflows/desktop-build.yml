@@ -6,6 +6,8 @@ on:
 jobs:
   macos:
     runs-on: macos-14
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "10.15"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -28,6 +30,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Prepare desktop frontend
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force apps/desktop/dist | Out-Null
+          Copy-Item apps/studio/ui/index.html apps/desktop/dist/index.html
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version ^2 --locked
       - name: Build Windows bundle
