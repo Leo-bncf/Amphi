@@ -18,6 +18,7 @@ def _root() -> Path:
 
 def _users_path() -> Path: return _root() / "users.json"
 def _tokens_path() -> Path: return _root() / "tokens.json"
+def _invites_path() -> Path: return _root() / "invites.json"
 
 def _load(path: Path) -> dict:
     try: return json.loads(path.read_text("utf-8"))
@@ -91,7 +92,33 @@ def admin_invite(username: str, display_name: str = "", role: str = "contributor
         users[username] = {"id": secrets.token_hex(16), "displayName": display_name or username,
                            "role": role, "disabled": False, "password": _hash_password(password)}
         _save(_users_path(), users)
-        return {"username": username, "password": password, "user": public_user(users[username])}
+        code = secrets.token_urlsafe(32)
+        invites = _load(_invites_path())
+        invites[hashlib.sha256(code.encode()).hexdigest()] = {"username": username, "created": time.time(), "used": False}
+        _save(_invites_path(), invites)
+        # password remains for backwards-compatible desktop/admin bootstrap; new students use code signup.
+        return {"username": username, "password": password, "inviteCode": code, "user": public_user(users[username])}
+
+def signup(code: str, password: str, display_name: str = "") -> dict | None:
+    """Consume a single-use invitation and issue the first bearer token."""
+    if not isinstance(code, str) or len(code) < 20 or not isinstance(password, str) or len(password) < 10:
+        return None
+    with _LOCK:
+        key = hashlib.sha256(code.encode()).hexdigest()
+        invites = _load(_invites_path()); invite = invites.get(key)
+        if not isinstance(invite, dict) or invite.get("used") or time.time() - float(invite.get("created", 0)) > 7 * 86400:
+            return None
+        users = _load(_users_path()); user = users.get(invite.get("username"))
+        if not isinstance(user, dict) or user.get("disabled"):
+            return None
+        user["password"] = _hash_password(password)
+        if display_name.strip(): user["displayName"] = display_name.strip()[:120]
+        invite["used"] = True; invite["usedAt"] = time.time()
+        _save(_users_path(), users); _save(_invites_path(), invites)
+        raw = secrets.token_urlsafe(32); tokens = _load(_tokens_path())
+        tokens[hashlib.sha256(raw.encode()).hexdigest()] = {"user": user["id"], "expires": time.time() + _TOKEN_TTL}
+        _save(_tokens_path(), tokens)
+        return {"token": raw, "expiresIn": _TOKEN_TTL, "user": public_user(user)}
 
 def admin_set_disabled(user_id: str, disabled: bool) -> dict:
     with _LOCK:

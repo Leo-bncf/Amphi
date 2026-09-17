@@ -1947,6 +1947,14 @@ class StudioHandler(AsrHandler):
             except Exception as exc:
                 self._send(400, {"error": str(exc)})
             return
+        if route == "/auth/signup":
+            try:
+                body = self._read_json()
+                result = identity_auth.signup(str(body.get("code", "")), str(body.get("password", "")), str(body.get("displayName", "")))
+                self._send(201, result) if result else self._send(400, {"error": "invitation invalide ou expirée"})
+            except Exception as exc:
+                self._send(400, {"error": str(exc)})
+            return
         if route == "/auth/logout":
             header = self.headers.get("Authorization", "")
             if header.startswith("Bearer "): identity_auth.logout(header[7:].strip())
