@@ -52,6 +52,7 @@ def _check_password(password: str, encoded: str) -> bool:
     except (ValueError, TypeError): return False
 
 def login(username: str, password: str) -> dict | None:
+    username = username.strip().lower()
     with _LOCK:
         user = _load(_users_path()).get(username)
         if not isinstance(user, dict) or user.get("disabled") or not _check_password(password, user.get("password", "")):
