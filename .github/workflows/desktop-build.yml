@@ -74,7 +74,12 @@ jobs:
           mapfile -t assets < <(find release -type f \
             \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' \) -print)
           test "${#assets[@]}" -gt 0
-          gh release create "$TAG" "${assets[@]}" \
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Amphi $TAG" \
+              --generate-notes
+          fi
+          gh release upload "$TAG" "${assets[@]}" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Amphi $TAG" \
-            --generate-notes
+            --clobber
