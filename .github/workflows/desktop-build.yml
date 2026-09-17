@@ -8,6 +8,8 @@ jobs:
     runs-on: macos-14
     env:
       MACOSX_DEPLOYMENT_TARGET: "10.15"
+      CMAKE_OSX_DEPLOYMENT_TARGET: "10.15"
+      CMAKE_ARGS: "-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

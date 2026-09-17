@@ -15,11 +15,16 @@ serde_json = "1"
 
 # Liaison a whisper.cpp. Metal sur Apple Silicon, CPU ailleurs — c'est ce qui
 # permet a chaque etudiant de transcrire chez lui a vitesse native.
-whisper-rs = { version = "0.14", default-features = false, features = ["metal"] }
 ureq = "2"
 base64 = "0.22"
 sha2 = "0.10"
 hex = "0.4"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+whisper-rs = { version = "0.14", default-features = false, features = ["metal"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+whisper-rs = { version = "0.14", default-features = false }
 
 # La compilation par defaut de Rust est lente a l'execution ; on optimise le
 # binaire livre, la transcription en depend directement.
