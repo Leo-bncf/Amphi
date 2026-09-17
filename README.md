@@ -1,308 +1,246 @@
-Amphi
-
-<p align="center">
-  <strong>Collaborative lecture transcription and source-backed AI notes.</strong>
-</p>
-<p align="center">
-  Record lectures from multiple devices, merge the transcriptions, and generate structured notes where every claim links back to a timestamped source.
-</p>
-
-⸻
-
-About
-
-Amphi is an open-source lecture note-taking application designed for students.
-
-Instead of relying on a single recording, several devices can record the same lecture. Amphi aligns and merges the different transcriptions into a cleaner canonical transcript, then uses an LLM to generate structured notes.
-
-The important part: every generated claim must point back to a timestamped passage from the original lecture.
-
-Multiple recordings
+# Amphi
+Prise de notes de cours en amphi : plusieurs téléphones enregistrent la même séance, les transcriptions sont fusionnées en une version canonique plus fiable que chaque flux isolé, puis un LLM génère des notes structurées dont **chaque affirmation renvoie à un passage horodaté du cours**.
+Conçu pour une promo de **10 à 30 personnes**, avec environ **30 h de cours par semaine**, pour un coût cible d'environ **2,80 €/mois**.
+> 📐 **[ARCHITECTURE.md](./ARCHITECTURE.md)** — décisions techniques, coûts, risques et jalons. À lire avant de toucher à l'architecture.
+---
+## Installation
+Si tu veux simplement utiliser Amphi, **inutile de cloner le dépôt ou de compiler l'application**.
+Les builds sont disponibles directement dans :
+### **[Releases → Latest release](../../releases/latest)**
+Télécharge la version correspondant à ton système puis installe l'application normalement.
+> Le développement se concentre actuellement principalement sur **macOS**. Le support des autres plateformes évoluera avec M2.
+---
+## État
+| Jalon | Contenu | État |
+|---|---|---|
+| M0 | Architecture, coûts, décisions | ✅ validé |
+| **M1** | Enregistrement → ASR → notes ancrées → lecture horodatée | ✅ démontrable |
+| M1+ | Import photos/documents, notes éditables, diagrammes Mermaid | ✅ démontrable |
+| **M2** | Application de bureau Tauri, transcription native embarquée | 🚧 en cours |
+| M3 | Multi-appareils, consensus, affichage des désaccords | à venir |
+| M4 | Import ICS, recherche sémantique | à venir |
+| M5 | Slides et photos, flashcards, exports | à venir |
+M1 commence volontairement par trois mesures susceptibles d'invalider des pans entiers de l'architecture :
+1. **Capture 90 min sur iPhone, écran verrouillé** — Safari suspend la capture en arrière-plan, alors que le scénario nominal est « téléphone posé sur la table ».
+2. ✅ **Débit Whisper sur Mac** — mesuré à **9,9× le temps réel** sur M4. Il en faut environ 3× pour tenir trois flux en direct.  
+   → `bench/results/whisper-m4.json`
+3. **Test à l'aveugle du document final** — comparaison entre modèle local, Mistral Small 4, Haiku 4.5 et Sonnet 5 sur un vrai cours.
+---
+## Pourquoi Amphi
+Le problème n'est pas seulement de transformer de l'audio en résumé.
+Le vrai problème est de pouvoir répondre à :
+> **« D'où vient cette information ? »**
+Amphi conserve donc la transcription comme source de vérité.
+```text
+plusieurs enregistrements
         ↓
-Speech-to-text
+transcriptions
         ↓
-Transcript alignment
+alignement + consensus
         ↓
-Canonical transcript
+transcription canonique
         ↓
-AI note generation
+génération des notes
         ↓
-Source validation
+validation des ancres
         ↓
-Structured notes with timestamps
+notes structurées et vérifiables
 
-Amphi is designed around university lectures, amphitheatres and study groups.
+Chaque bloc généré doit pouvoir renvoyer vers le passage exact du cours qui le justifie.
 
-⸻
-
-Download
-
-If you simply want to use Amphi, you do not need to clone or build the repository.
-
-Go to the repository’s Releases section and download the latest version for your platform.
-
-➜ Download Amphi from Releases
-
-The desktop application is currently under active development, with macOS being the main development platform.
+S’il n’existe pas d’ancre valide, le bloc est écarté.
 
 ⸻
 
-Features
+Principes
 
-* 🎙️ Lecture recording
-* 🧠 Local Whisper transcription
-* 👥 Multi-device recordings
-* 🔀 Multi-transcript consensus
-* 📝 AI-generated structured notes
-* 🔗 Timestamped sources for generated information
-* ▶️ Click a timestamp to return to the original lecture
-* 🖼️ Import board photos
-* 📄 Import documents
-* ✏️ Editable notes
-* ∑ LaTeX equations with KaTeX
-* 📊 Mermaid diagrams
-* 🔎 Full-text search
-* 📤 Markdown export
-* 🖨️ PDF printing
-* 🔒 Local-first processing
-* 🖥️ Native Tauri desktop application
+Trois règles de fond sont visibles directement dans l’application :
+
+* rien d’inventé — un bloc dont la source citée ne correspond pas au contenu est écarté, pas affiché ;
+* pas de section creuse — si l’enseignant annonce un titre sans rien développer, aucune rubrique n’est créée ;
+* les compléments sont signalés — l’option « compléter les prérequis manquants » ajoute des blocs explicitement marqués hors cours, jamais mêlés au contenu de la séance.
 
 ⸻
 
-Why Amphi?
+Fonctionnalités actuelles
 
-Most AI note-taking tools essentially work like this:
-
-Audio → AI summary
-
-Amphi takes a different approach:
-
-Audio
-  ↓
-Transcript
-  ↓
-Verified source
-  ↓
-Structured notes
-  ↓
-Timestamped evidence
-
-The transcript remains the source of truth.
-
-If a generated note cannot be supported by the cited transcript, it is rejected instead of displayed.
+* 🎙️ enregistrement micro ;
+* 🧠 transcription locale ;
+* ⏱️ timestamps cliquables ;
+* 📚 bibliothèque classée par matière et chapitre ;
+* 🔎 recherche plein texte ;
+* 🖼️ import de photos du tableau ;
+* 📄 import de documents ;
+* ✏️ notes éditables ;
+* ∑ formules LaTeX via KaTeX ;
+* 📊 diagrammes Mermaid ;
+* 📤 export Markdown ;
+* 🖨️ impression PDF ;
+* 🔗 génération de notes ancrées dans la transcription ;
+* ⚡ transcription native via MLX ;
+* 🖥️ application de bureau Tauri.
 
 ⸻
 
-Principles
+Prérequis
 
-Nothing invented
+Pour le développement :
 
-A generated block whose cited source does not support its content is discarded.
-
-No empty sections
-
-If a lecturer announces a section but never explains it, Amphi does not create an empty section just because the title was mentioned.
-
-External information stays visible
-
-Amphi can optionally complete missing prerequisites or context.
-
-Any information that does not come directly from the lecture is explicitly marked as external knowledge.
-
-It is never silently mixed with the lecturer’s content.
-
-⸻
-
-Project status
-
-Milestone	Description	Status
-M0	Architecture, costs and technical decisions	✅ Complete
-M1	Recording → ASR → anchored notes → timestamp playback	✅ Demonstrable
-M1+	Documents, photos, editable notes and Mermaid	✅ Demonstrable
-M2	Tauri desktop app + embedded native transcription	🚧 In progress
-M3	Multi-device consensus and disagreement detection	📋 Planned
-M4	ICS import and semantic search	📋 Planned
-M5	Slides, flashcards and additional exports	📋 Planned
-
-⸻
-
-Performance
-
-Native transcription is one of the main architectural choices behind Amphi.
-
-Measured on an Apple M4:
-
-Whisper large-v3-turbo
-≈ 9.9× realtime using MLX
-
-Benchmark:
-
-bench/results/whisper-m4.json
-
-Browser-based transcription was significantly slower during testing, which is one of the reasons Amphi is moving toward a native desktop application.
-
-⸻
-
-Cost target
-
-Amphi is designed for a cohort rather than an expensive individual subscription.
-
-Target workload:
-
-10–30 students
-~30 hours of lectures / week
-≈ €2.80 / month
-
-The final cost depends on usage, model providers and how much processing is performed locally.
-
-⸻
-
-Architecture
-
-Detailed architectural decisions, costs, risks and milestones are documented here:
-
-ARCHITECTURE.md
-
-Read this before making significant architectural changes.
-
-⸻
-
-Development
-
-Requirements
-
-* Node.js 24+
-* pnpm 12+
+* Node ≥ 24
+* pnpm ≥ 12
 * Python 3.11+
 * Docker
-* Rust / Cargo for the desktop application
+* Rust / Cargo
 
-Install pnpm:
+Installer pnpm :
 
-npm install -g pnpm
+npm i -g pnpm
+
+Aucun Homebrew n’est requis pour le worker ASR : MLX s’installe via pip et ne nécessite aucune compilation spécifique.
 
 ⸻
 
-Setup
-
-Clone the repository:
-
-git clone https://github.com/YOUR_USERNAME/amphi.git
-cd amphi
-
-Install dependencies:
+Démarrage
 
 pnpm install
-
-Run checks:
-
 pnpm typecheck
 pnpm test
 
 ⸻
 
-Local Studio
-
-Amphi Studio can run locally without Docker or a database.
+App locale
 
 ./bench/.venv/bin/python apps/studio/server.py
 
-Open:
+Puis ouvrir :
 
 http://127.0.0.1:8765
 
-The local Studio currently supports:
+La version locale fonctionne sans Docker ni base de données.
 
-* lecture library
-* subject organisation
-* chapters
-* full-text search
-* microphone recording
-* local transcription
-* clickable timestamps
-* photo imports
-* document imports
-* editable notes
-* KaTeX formulas
-* Mermaid diagrams
-* Markdown export
-* PDF printing
+Elle fournit notamment :
 
-Everything runs directly on the machine.
+* bibliothèque par matière et chapitre ;
+* recherche plein texte ;
+* enregistrement micro ;
+* transcription locale ;
+* timestamps cliquables ;
+* import d’images et de documents ;
+* édition des notes ;
+* KaTeX ;
+* Mermaid ;
+* export Markdown ;
+* impression PDF.
 
-⸻
-
-Environment variables
-
-Create a .env file at the root of the project:
-
-MISTRAL_API_KEY=your_key_here
-
-The .env file is ignored by Git.
-
-Without a Mistral API key, transcription still works.
-
-When available, note generation can fall back to a local MLX model.
+Tout tourne localement sur la machine.
 
 ⸻
 
-Anchor validation
+Interface
 
-Run the anchor validation tests with:
+Le système visuel suit Hallmark :
+
+npx skills add nutlope/hallmark
+
+Principes :
+
+* palette OKLCH avec une seule teinte d’ancrage ;
+* Bricolage Grotesque + Cardo ;
+* polices vendorisées localement ;
+* grille d’espacement de 4 pt ;
+* pas de sidebar permanente ;
+* pas de dégradés.
+
+Les polices sont servies depuis :
+
+apps/studio/ui/vendor/fonts/
+
+Aucun CDN n’est nécessaire : l’application reste utilisable sans réseau.
+
+⸻
+
+Modèles
+
+La clé Mistral doit être placée dans un .env à la racine :
+
+MISTRAL_API_KEY=...
+
+Le fichier .env n’est pas suivi par Git.
+
+Sans clé :
+
+* la transcription continue de fonctionner ;
+* la génération de notes peut basculer vers un modèle MLX local si celui-ci est disponible.
+
+⸻
+
+Validation des ancres
 
 ./bench/.venv/bin/python apps/studio/test_anchors.py
 
-Generated note blocks without valid transcript references are rejected.
+La suite couvre actuellement 11 cas autour de la validation des références entre notes générées et transcription.
+
+Un bloc sans ancre valide est rejeté, pas simplement marqué comme incertain.
 
 ⸻
 
-Desktop app
-
-Build the Tauri application:
+Application de bureau
 
 cd apps/desktop/src-tauri
 cargo build --release
 
-On macOS, the application is generated in:
+Le paquet macOS est généré dans :
 
 apps/desktop/dist-app/Amphi.app
 
-Server configuration:
+L’adresse du serveur est configurée dans :
 
 ~/Library/Application Support/Amphi/server.txt
 
-Secrets are never stored in plain configuration files.
+Les secrets ne sont jamais lus depuis des fichiers classiques.
 
-On macOS, credentials can be stored in Keychain using the Amphi service:
+Sur macOS, ajouter dans le trousseau Keychain avec le service Amphi :
 
 server-token
 server-password
 
-Development overrides:
+Overrides explicites de développement :
 
 AMPHI_TOKEN=
 AMPHI_PASSWORD=
 
+Sous Linux, aucun fichier de secrets n’est utilisé et l’application reste sans authentification tant qu’aucune variable d’environnement n’est fournie.
+
 ⸻
 
-Whisper benchmark
+Pourquoi une app native
 
-Create the Python environment:
+Mesuré sur la même machine et le même audio :
+
+whisper-base / WebGPU     ≈ 3,9× temps réel
+large-v3-turbo / WebGPU   ≈ 0,5× estimé
+large-v3-turbo / MLX      ≈ 9,9× temps réel
+
+Le moteur natif permet donc d’utiliser un modèle beaucoup plus lourd tout en restant largement au-dessus du temps réel.
+
+Ce choix détermine notamment si un étudiant peut transcrire gratuitement sur sa propre machine ou s’il faut envoyer systématiquement l’audio vers un serveur.
+
+⸻
+
+Banc de mesure Whisper
 
 cd bench
 python3 -m venv .venv
 ./.venv/bin/pip install mlx-whisper
 ./.venv/bin/python bench_whisper.py
 
-The first run downloads the selected Whisper model.
+Le premier passage télécharge le modèle, environ 1,6 Go.
 
-Benchmark results are written to:
+Le script mesure ensuite le régime à chaud utilisé par le worker et écrit :
 
 bench/results/whisper-m4.json
 
-⸻
-
-Generate benchmark audio
+Pour régénérer l’audio de test :
 
 say -v Jacques \
   -f fixtures/cours-regularisation.txt \
@@ -314,109 +252,93 @@ afconvert \
   /tmp/cours.aiff \
   fixtures/cours-regularisation.wav
 
-Synthetic speech is considerably cleaner than an actual university lecture.
+L’audio étant synthétique et anormalement propre, le WER obtenu doit être considéré comme un plancher de validation, pas comme une prévision terrain.
 
-The resulting WER should therefore be treated as a validation baseline rather than an estimate of real-world accuracy.
-
-⸻
-
-Repository structure
-
-apps/
-├── web          PWA — recording, playback and editing
-├── api          Fastify API — REST + session WebSocket
-├── realtime     Hocuspocus / Yjs realtime collaboration
-├── worker       BullMQ jobs — ASR, consensus and note generation
-├── mac-worker   Local MLX ASR worker
-├── studio       Lightweight local application
-└── desktop      Tauri desktop application
-packages/
-├── shared       Types, Zod schemas and provider interfaces
-├── db           Drizzle schema and migrations
-└── consensus    Pure TypeScript multi-transcript fusion
-bench/
-└── Benchmarks, WER tests and model comparisons
+La vraie mesure devra être faite sur un cours enregistré en conditions réelles.
 
 ⸻
 
-Development conventions
+Structure
 
-* TypeScript strict mode
-* No any
-* Zod validation at system boundaries
-* External ASR, LLM and storage providers are hidden behind interfaces
-* packages/consensus contains no I/O
-* Consensus logic must remain independently testable
-* Generated notes without valid transcript anchors are rejected
+apps/web          PWA Next.js — capture, lecture, édition
+apps/api          API Fastify — REST + WebSocket de session
+apps/realtime     Hocuspocus (Yjs) + présence
+apps/worker       Jobs BullMQ — ASR, consensus, génération de notes
+apps/mac-worker   Worker ASR local opportuniste (MLX), ADR-15
+apps/studio       Application locale légère
+apps/desktop      Application Tauri
+packages/shared   Types, schémas Zod, interfaces fournisseurs
+packages/db       Schéma Drizzle et migrations
+packages/consensus Fusion multi-flux — TypeScript pur, sans I/O
+bench             Whisper, WER, benchmarks et comparaison de modèles
+
+⸻
+
+Conventions
+
+* TypeScript strict ;
+* aucun any ;
+* validation Zod à toutes les frontières ;
+* fournisseurs externes ASR, LLM et stockage derrière des interfaces ;
+* changer de fournisseur doit être un changement de configuration, pas une réécriture ;
+* packages/consensus reste pur et sans I/O ;
+* le consensus doit être testable sur des cas synthétiques et sur des séances rejouées ;
+* un bloc de notes sans ancre valide vers la transcription est écarté.
 
 ⸻
 
 Roadmap
 
-* Local lecture recording
-* Whisper transcription
-* Timestamped transcript
-* AI-generated notes
-* Source anchors
-* Photo imports
-* Document imports
-* Editable notes
-* Mermaid diagrams
-* Markdown export
-* Native desktop release
-* Multi-device recording
-* Transcript consensus
-* Disagreement detection
-* ICS timetable import
-* Semantic search
-* Lecture slides integration
+* Capture audio
+* Transcription Whisper
+* Timestamps
+* Notes générées
+* Validation des ancres
+* Import photos
+* Import documents
+* Notes éditables
+* Mermaid
+* Export Markdown
+* Release desktop stable
+* Multi-appareils
+* Consensus multi-flux
+* Affichage des désaccords
+* Import ICS
+* Recherche sémantique
 * Flashcards
-* Additional export formats
+* Slides
+* Exports supplémentaires
 
 ⸻
 
-Contributing
+Contribution
 
-Contributions, bug reports and ideas are welcome.
+Les contributions sont bienvenues.
 
-If you want to contribute:
+Avant toute modification structurelle importante, lire :
 
-1. Fork the repository
-2. Create a branch
+ARCHITECTURE.md
 
-git checkout -b feature/my-feature
-
-3. Make your changes
-4. Run the checks
+Puis lancer :
 
 pnpm typecheck
 pnpm test
 
-5. Open a Pull Request
-
-For significant architectural changes, please read ARCHITECTURE.md first.
+avant d’ouvrir une Pull Request.
 
 ⸻
 
-License
+GitHub Topics
 
-See the LICENSE file for details.
+À mettre dans About → Topics sur GitHub :
 
-⸻
-
-Topics
-
-Suggested GitHub repository topics:
-
-amphi
 education
 students
 university
 lecture-notes
 note-taking
-ai-notes
-speech-to-text
 transcription
+speech-to-text
 whisper
 mlx
 llm
@@ -425,9 +347,17 @@ tauri
 typescript
 rust
 nextjs
+yjs
 collaboration
+edtech
 open-source
 student-tools
-productivity
-edtech
-artificial-intelligence
+ai-notes
+
+⸻
+
+License
+
+Voir LICENSE.
+
+Là c’est bien le **source Markdown complet**, donc quand tu le colles dans `README.md`, GitHub rendra directement les titres, le gras, les tableaux, checkboxes, blocs de code et liens.
