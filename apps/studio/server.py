@@ -1815,12 +1815,27 @@ class StudioHandler(AsrHandler):
             user = self._identity()
             self._send(200, {"user": user}) if user else self._send(401, {"error": "authentification requise"})
             return
+        # L'interface et ses ressources doivent rester publiques : elles affichent
+        # justement l'écran de connexion. Les données restent protégées ci-dessous.
+        if self.path in ("/", "/index.html"):
+            self._send_file(STUDIO_DIR / "ui" / "index.html", "text/html; charset=utf-8")
+            return
+        if self.path.startswith("/vendor/"):
+            # Ressources statiques nécessaires avant connexion.
+            rel = self.path[len("/vendor/"):]
+            target = (STUDIO_DIR / "ui" / "vendor" / rel).resolve()
+            root = (STUDIO_DIR / "ui" / "vendor").resolve()
+            if root not in target.parents and target != root:
+                self._send(403, {"error": "chemin hors du dossier vendor"})
+                return
+            types = {".js": "application/javascript", ".css": "text/css; charset=utf-8",
+                     ".woff2": "font/woff2", ".woff": "font/woff"}
+            self._send_file(target, types.get(target.suffix, "application/octet-stream"),
+                            cache="public, max-age=604800")
+            return
         # /health reste ouvert : c'est ce que la sonde du tunnel interroge.
         if self.path != "/health" and not self._authorized():
             self._demand_auth()
-            return
-        if self.path in ("/", "/index.html"):
-            self._send_file(STUDIO_DIR / "ui" / "index.html", "text/html; charset=utf-8")
             return
         if self.path.startswith("/vendor/"):
             # Ressources vendorisées : polices, mermaid. Jamais de CDN — l'app doit
