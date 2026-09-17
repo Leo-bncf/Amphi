@@ -22,6 +22,17 @@ print(f"    Python {sys.version_info.major}.{sys.version_info.minor} OK")
 PY
 echo "    Architecture : $(dpkg --print-architecture 2>/dev/null || uname -m)"
 
+# pypdf est du Python pur : il s'installe sur la carte ARM sans rien compiler.
+# Sans lui le serveur démarre et tout marche, sauf le dépôt d'un PDF.
+if python3 -c "import pypdf" 2>/dev/null; then
+  echo "    pypdf OK (lecture des PDF)"
+else
+  echo "    pypdf absent — installation"
+  python3 -m pip install --quiet pypdf 2>/dev/null \
+    || apt-get install -y python3-pypdf 2>/dev/null \
+    || echo "    ATTENTION : pypdf non installé, le dépôt de PDF renverra une erreur explicite"
+fi
+
 echo "==> Hygiène carte SD"
 # Les journaux systemd sont la première cause d'usure d'une carte SD. On les
 # garde en RAM et on les borne : la carte ne subit plus qu'une écriture par
@@ -86,8 +97,9 @@ if [ ! -f /etc/amphi.env ]; then
 # Clé Mistral — sans elle, ni notes ni lecture des photos.
 MISTRAL_API_KEY=
 
-# 127.0.0.1 tant qu'il n'y a pas d'authentification.
-# Le tunnel Cloudflare se connecte en local, il n'a pas besoin d'exposition réseau.
+# Mot de passe partagé par les apps. Le serveur refuse une écoute publique sans
+# cette valeur ; le tunnel Cloudflare conserve en plus HTTPS jusqu'au client.
+AMPHI_PASSWORD=
 AMPHI_HOST=127.0.0.1
 PORT=8765
 CONF
@@ -105,7 +117,7 @@ Installé. Il reste à :
        rsync -av --exclude data --exclude .git --exclude bench/.venv \\
              ~/amphi/ $USER_NAME@$(hostname -I | awk '{print $1}'):$APP_DIR/
 
-  2. Renseigner la clé :
+  2. Renseigner MISTRAL_API_KEY et AMPHI_PASSWORD :
        sudo nano /etc/amphi.env
 
   3. Démarrer :
@@ -115,6 +127,6 @@ Installé. Il reste à :
   4. Vérifier :
        curl -s localhost:8765/health
 
-N'EXPOSE PAS ce service sur Internet pour l'instant : il n'a aucune
-authentification. Tant qu'elle n'existe pas, reste sur Tailscale.
+Le tunnel Cloudflare est l'unique accès Internet prévu. Ne publie jamais le
+port 8765 directement sur le routeur et ne laisse pas AMPHI_PASSWORD vide.
 EOM

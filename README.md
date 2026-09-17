@@ -67,10 +67,14 @@ La clé `MISTRAL_API_KEY` va dans un `.env` à la racine (non suivi par git). Sa
 cd apps/desktop/src-tauri && cargo build --release     # ~1 min, cmake requis
 ```
 
-Le paquet est dans `apps/desktop/dist-app/Amphi.app`. L'adresse du serveur et
-le mot de passe se règlent dans `~/Library/Application Support/Amphi/` —
-`server.txt` et `password.txt` — donc chaque étudiant pointe la carte sans
-recompilation.
+Le paquet est dans `apps/desktop/dist-app/Amphi.app`. L'adresse du serveur se
+règle dans `~/Library/Application Support/Amphi/server.txt`. Les secrets ne
+sont jamais lus depuis des fichiers : sur macOS, ajoutez `server-token` et
+`server-password` au trousseau Keychain avec le service `Amphi` (ou utilisez
+`AMPHI_TOKEN` / `AMPHI_PASSWORD` uniquement comme overrides explicites de
+développement). Sur Linux, l'application n'utilise aucun fichier de secrets et
+reste sans authentification tant qu'une variable d'environnement n'est pas
+fournie.
 
 **Pourquoi une app et pas une page web.** Mesuré sur la même machine et le même
 audio : dans le navigateur, `whisper-base` en WebGPU atteint 3,9× le temps réel

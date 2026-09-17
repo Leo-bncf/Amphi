@@ -156,6 +156,22 @@ label.toggle { display: inline-flex; align-items: center; gap: var(--s-2xs); fon
                   font-family: var(--font-data); letter-spacing: .1em; text-transform: uppercase; }
 .sheetlet input { font-family: var(--font-display); font-size: var(--t-sm); padding: 7px 10px;
                   border: 1px solid var(--rule); background: var(--paper-2); color: var(--ink); }
+.sheetlet textarea { font-family: var(--font-display); font-size: var(--t-sm); padding: 7px 10px;
+                     border: 1px solid var(--rule); background: var(--paper-2); color: var(--ink);
+                     resize: vertical; width: 100%; }
+.who { font-family: var(--font-data); font-size: var(--t-xs); color: var(--accent); margin-left: 8px; white-space: nowrap; }
+.sheetlet.wide { max-width: 540px; }
+.jsec { font-family: var(--font-data); font-size: var(--t-xs); letter-spacing: .12em; text-transform: uppercase;
+        color: var(--neutral); margin: 12px 0 4px; }
+.joinrow { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; width: 100%; text-align: left;
+           padding: 10px 12px; margin: 4px 0; border: 1px solid var(--rule); border-radius: 6px;
+           background: var(--paper-2); color: var(--ink); cursor: pointer; align-items: center; }
+.joinrow:hover { border-color: var(--accent); }
+.joinrow .jt { font-family: var(--font-display); font-size: var(--t-sm); font-weight: 600; }
+.joinrow .jm { grid-row: 2; color: var(--neutral); font-size: var(--t-xs); font-family: var(--font-data); }
+.joinrow .jgo { grid-row: 1 / span 2; grid-column: 2; align-self: center; color: var(--accent);
+                font-family: var(--font-data); font-size: var(--t-xs); text-transform: uppercase; letter-spacing: .1em; }
+.jempty { color: var(--neutral); font-size: var(--t-sm); padding: 16px 4px; line-height: 1.5; }
 .vlist { display: grid; max-height: 320px; overflow-y: auto; }
 .vrow { display: grid; grid-template-columns: 130px 1fr 68px; gap: var(--s-xs); text-align: left;
         align-items: baseline; padding: 8px 6px; border: 0; border-top: 1px solid var(--hair);
@@ -169,6 +185,7 @@ label.toggle { display: inline-flex; align-items: center; gap: var(--s-2xs); fon
 .sheetlet .hintline { font-family: var(--font-data); font-size: var(--t-xs); color: var(--neutral);
                       min-height: 1.2em; }
 .sheetlet .ma { display: flex; gap: var(--s-xs); justify-content: flex-end; margin-top: var(--s-xs); }
+.sheetlet .ma .danger { background: var(--accent); border-color: var(--accent); color: var(--paper); }
 .doc .mv { position: absolute; top: var(--s-xs); right: 30px; opacity: 0; }
 .doc:hover .mv { opacity: 1; }
 
@@ -296,6 +313,15 @@ audio { width: 100%; margin-top: var(--s-sm); }
 .seg time { font-family: var(--font-data); font-size: var(--t-xs); color: var(--accent); cursor: pointer;
             flex: none; font-variant-numeric: tabular-nums; }
 .seg.low time { color: var(--muted); text-decoration: underline dotted; }
+.seg.disputed { border-left: 2px solid var(--accent); padding-left: 4px; }
+.seg details { flex: 1; min-width: 0; }
+.seg summary { cursor: pointer; list-style: none; }
+.seg summary::-webkit-details-marker { display: none; }
+.seg summary::after { content: " variantes"; margin-left: var(--s-xs); color: var(--accent);
+                      font: var(--t-xs)/1 var(--font-data); }
+.seg .evidence { margin: var(--s-xs) 0 var(--s-xs); padding: var(--s-xs); background: var(--paper-2);
+                 border: 1px solid var(--hair); color: var(--neutral); font: var(--t-xs)/1.5 var(--font-data); }
+.seg .variant { display: flex; justify-content: space-between; gap: var(--s-sm); }
 
 #drop { border: 1px dashed var(--rule); padding: var(--s-md); text-align: center; color: var(--neutral);
         font-size: var(--t-sm); cursor: pointer; transition: border-color .14s, background .14s; }
@@ -321,9 +347,11 @@ audio { width: 100%; margin-top: var(--s-sm); }
 
 /* Rail à gauche, colonne de lecture à droite : la structure vient du rail, pas
    de numéros posés dans la marge du texte. */
-/* Le papier occupe toute la largeur, la colonne de texte reste à gauche et
-   bornée à ~78 caractères. Le vide à droite est voulu : au-delà de cette
-   longueur de ligne, l'œil ne retrouve plus le début de la suivante. */
+/* Le papier occupe toute la largeur ; la colonne de texte reste calée à gauche.
+   Sa largeur est un réglage et non un dogme : une ligne courte se relit mieux —
+   au-delà d'environ 80 signes l'œil peine à retrouver le début de la suivante —
+   mais sur un grand écran le vide à droite peut agacer. Trois crans, et le
+   choix est gardé d'une séance à l'autre. */
 .sheetGrid { display: grid; grid-template-columns: 224px minmax(0, 1fr); align-items: start; }
 @media (max-width: 1100px) { .sheetGrid { grid-template-columns: 1fr; } }
 .rail { position: sticky; top: 70px; padding: var(--s-lg) var(--s-md) var(--s-xl) var(--s-lg);
@@ -338,7 +366,7 @@ audio { width: 100%; margin-top: var(--s-sm); }
 .rail .meta { margin-top: var(--s-md); padding-top: var(--s-sm); border-top: 1px solid var(--hair);
               color: var(--neutral); font-size: var(--t-xs); display: grid; gap: 3px;
               font-family: var(--font-data); }
-.sheetInner { padding: var(--s-xl) var(--s-xl) var(--s-2xl); max-width: 78ch; min-width: 0; }
+.sheetInner { padding: var(--s-xl) var(--s-xl) var(--s-2xl); max-width: var(--col, none); min-width: 0; }
 @media (max-width: 700px) { .sheetInner { padding: var(--s-lg) var(--s-md) var(--s-xl); } }
 
 /* Couverture biaisée à gauche ; l'eyebrow sort de l'axe, à droite du titre. */
@@ -537,8 +565,9 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
       <div class="card" id="docsCard">
         <h2>Sources</h2>
         <p class="hint">Photo du tableau, diapositive, texte collé : sert de matière aux notes. Pour insérer une image <em>dans</em> les notes, utilise « Ajouter une image ».</p>
-        <div id="drop">Dépose une image ou un fichier texte — ou clique pour choisir</div>
-        <input type="file" id="fileInput" accept="image/*,.txt,.md" multiple hidden />
+        <div id="drop">Dépose une photo du tableau, un .pdf, un diaporama .pptx<br>
+          <span style="opacity:.7">clique pour choisir, ou colle avec ⌘V</span></div>
+        <input type="file" id="fileInput" accept="image/*,.pdf,.txt,.md,.pptx,.docx" multiple hidden />
         <div class="row" style="margin-top:8px"><button class="sm" id="pasteBtn">Coller du texte</button></div>
         <div id="attachments"></div>
       </div>
@@ -548,7 +577,7 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
         <div class="tools noprint">
           <button id="notesBtn" class="primary" disabled>Générer les notes</button>
           <select id="langSel" title="Langue des notes">
-            <option value="auto">Langue : auto</option><option value="en">English</option>
+            <option value="en" selected>English</option><option value="auto">Langue : auto</option>
             <option value="fr">Français</option><option value="es">Español</option><option value="de">Deutsch</option>
           </select>
           <label class="toggle"><input type="checkbox" id="enrichChk" /> compléter les prérequis</label>
@@ -557,6 +586,7 @@ figure figcaption { font-family: var(--font-display); font-size: var(--t-xs); co
           <button id="imgBtn" disabled>Image</button>
           <input type="file" id="imgInput" accept="image/*" multiple hidden />
           <span class="tgap"></span>
+          <button id="colBtn" class="sm ghost" title="Largeur du texte des notes">Texte : pleine largeur</button>
           <button id="soloBtn" class="sm ghost" title="Occuper toute la page">⇤ Pleine page</button>
           <span class="tsep"></span>
           <button id="htmlBtn" class="sm ghost" disabled>Page autonome</button>
@@ -587,12 +617,28 @@ const $ = (id) => document.getElementById(id);
 const API = (globalThis.AMPHI_API ?? "").replace(/\/$/, "");
 const api = (path) => API + path;
 
-// Dans l'application de bureau, les requêtes partent d'une autre origine que
-// le serveur : le navigateur embarqué n'a pas de session et ne peut pas
-// afficher la boîte d'authentification. On attache donc l'identifiant nous-mêmes.
-if (globalThis.AMPHI_AUTH && API) {
+// Must change only when request/response semantics change, not with Whisper.
+const AMPHI_CLIENT_PROTOCOL = 1;
+let compatibility = { compatible: true };
+async function checkCompatibility() {
+  const response = await fetch(api(`/compatibility?clientProtocol=${AMPHI_CLIENT_PROTOCOL}`));
+  const result = await response.json();
+  compatibility = result;
+  if (!result.compatible) {
+    const message = `client obsolète (serveur ${result.serverVersion}, protocole minimum ${result.minClientProtocolVersion})`;
+    $("engine").textContent = message;
+    throw new Error(message);
+  }
+  return result;
+}
+
+// L'app desktop injecte un bearer token. Le Basic partagé reste accepté pour
+// la migration des anciennes installations.
+if ((globalThis.AMPHI_TOKEN || globalThis.AMPHI_AUTH) && API) {
   const nativeFetch = globalThis.fetch.bind(globalThis);
-  const header = "Basic " + btoa("amphi:" + globalThis.AMPHI_AUTH);
+  const header = globalThis.AMPHI_TOKEN
+    ? "Bearer " + globalThis.AMPHI_TOKEN
+    : "Basic " + btoa("amphi:" + globalThis.AMPHI_AUTH);
   globalThis.fetch = (input, init = {}) => {
     const url = typeof input === "string" ? input : input?.url ?? "";
     if (!url.startsWith(API)) return nativeFetch(input, init);
@@ -601,13 +647,40 @@ if (globalThis.AMPHI_AUTH && API) {
     return nativeFetch(input, { ...init, headers, credentials: "omit" });
   };
 }
+// suppressErrorRendering : sans ça, Mermaid injecte lui-même dans la page un
+// dessin « Syntax error in text — mermaid version 11.17.2 » avant de lever son
+// erreur. On se retrouvait avec ce pavé d'erreur en plus de notre message, et
+// il survivait au retrait de la carte.
 mermaid.initialize({ startOnLoad: false, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "neutral",
-                     securityLevel: "strict" });
+                     securityLevel: "strict", suppressErrorRendering: true });
 
-const state = { id: null, rec: null, recording: false, stream: null, audioCtx: null,
+/** Message d'erreur du parseur Mermaid, ou null si le code est valide.
+ *  On valide AVANT de rendre : c'est le seul moyen de réparer sans laisser
+ *  passer un dessin d'erreur sous les yeux de l'étudiant. */
+async function mermaidError(code) {
+  if (!code?.trim()) return "diagramme vide";
+  try { await mermaid.parse(code); return null; }
+  catch (e) { return String(e.message ?? e).split("\n").slice(0, 3).join(" ").slice(0, 200); }
+}
+
+/** Renvoie le schéma corrigé par le modèle, ou null. */
+async function repairDiagram(d, why) {
+  try {
+    const r = await fetch(api("/diagram"), { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ context: [d.title, d.explanation].filter(Boolean).join("\n") || "schéma de cours",
+                             brokenMermaid: d.mermaid, parserError: why,
+                             language: state.doc?.language ?? $("langSel").value }) });
+    const res = await r.json();
+    if (!r.ok || !res.mermaid?.trim()) return null;
+    return (await mermaidError(res.mermaid)) ? null : res;
+  } catch { return null; }
+}
+
+const state = { id: null, sessionKey: null, schedule: null, contributor: null,
+                rec: null, recording: false, stream: null, audioCtx: null,
                 startedAt: 0, partBase: 0, partTimer: null, timer: null, queue: null,
                 parts: [], segments: [], attachments: [], doc: null, diagrams: [], images: [],
-                lexicon: [], dirty: false };
+                consensus: null, lexicon: [], dirty: false };
 
 const fmt = (ms) => { const s = Math.floor(ms / 1000);
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
@@ -631,6 +704,40 @@ function applySolo(on) {
   $("soloBtn").textContent = on ? "⇥ Afficher le panneau" : "⇤ Pleine page";
   try { localStorage.setItem(SOLO_KEY, on ? "1" : "0"); } catch { /* navigation privée */ }
 }
+// Trois largeurs de texte. Par défaut : toute la place disponible, à droite du
+// sommaire. Les deux autres crans bornent la ligne — au-delà d'environ 80
+// signes l'œil peine à retrouver le début de la suivante — mais c'est un
+// conseil de typographe, pas une règle, et l'écran appartient au lecteur.
+const COLS = [
+  { key: "pleine", css: "none", label: "Texte : pleine largeur" },
+  { key: "lecture", css: "78ch", label: "Texte : colonne de lecture" },
+  { key: "large", css: "104ch", label: "Texte : colonne large" },
+];
+// Clé neuve : la version précédente écrivait le réglage au chargement, donc
+// « lecture » se retrouvait mémorisé sans que personne ait cliqué, et le
+// nouveau défaut ne pouvait plus s'appliquer. On repart de zéro une fois.
+const COL_KEY = "amphi.col2";
+
+/** `persist` seulement sur un clic : un défaut appliqué n'est pas un choix
+ *  de l'utilisateur, et l'écrire empêcherait tout changement de défaut. */
+function applyCol(key, persist = false) {
+  const col = COLS.find((c) => c.key === key) ?? COLS[0];
+  document.documentElement.style.setProperty("--col", col.css);
+  $("colBtn").textContent = col.label;
+  $("colBtn").dataset.k = col.key;
+  if (persist) {
+    try { localStorage.setItem(COL_KEY, col.key); } catch { /* navigation privée */ }
+  }
+}
+$("colBtn").onclick = () => {
+  const i = COLS.findIndex((c) => c.key === $("colBtn").dataset.k);
+  applyCol(COLS[(i + 1) % COLS.length].key, true);
+};
+try {
+  applyCol(localStorage.getItem(COL_KEY) ?? "pleine");
+  localStorage.removeItem("amphi.col");   // ne sert plus à rien
+} catch { applyCol("pleine"); }
+
 $("soloBtn").onclick = () => applySolo(!$("workspace").classList.contains("solo"));
 try { applySolo(localStorage.getItem(SOLO_KEY) === "1"); } catch { applySolo(false); }
 
@@ -640,7 +747,7 @@ try { applySolo(localStorage.getItem(SOLO_KEY) === "1"); } catch { applySolo(fal
 // vitesse native. Dans le navigateur, elle part au serveur. L'interface ne
 // suppose rien : elle demande ce dont la machine est capable et s'adapte.
 const T = globalThis.__TAURI__;
-const native = { available: false, model: false, sizeMb: 0 };
+const native = { available: false, model: false, sizeMb: 0, declined: false };
 
 async function probeNative() {
   if (!T?.core?.invoke) return;
@@ -673,27 +780,124 @@ async function blobToPcm16(blob) {
   return btoa(binary);
 }
 
+/** Confirmation dans une vraie fenêtre de l'app.
+ *
+ *  `confirm()` du navigateur ne s'affiche pas dans WKWebView : il rend « non »
+ *  sans rien montrer, et le bouton semble simplement mort. C'est ce qui rendait
+ *  la suppression d'une séance inopérante. */
+function ask(title, body, okLabel, danger = false) {
+  return new Promise((resolve) => {
+    const back = document.createElement("div"); back.className = "modal";
+    back.innerHTML = `<div class="sheetlet">
+      <div class="mt">${esc(title)}</div>
+      <div class="mn">${esc(body)}</div>
+      <div class="ma">
+        <button id="aX">Annuler</button>
+        <button id="aOk" class="primary${danger ? " danger" : ""}">${esc(okLabel)}</button>
+      </div></div>`;
+    document.body.appendChild(back);
+    const done = (ok) => { back.remove(); resolve(ok); };
+    back.querySelector("#aOk").onclick = () => done(true);
+    back.querySelector("#aX").onclick = () => done(false);
+    back.onclick = (e) => { if (e.target === back) done(false); };
+    // Échap annule, Entrée confirme — on est dans une app, pas dans une page.
+    const keys = (e) => {
+      if (e.key === "Escape") { removeEventListener("keydown", keys); done(false); }
+      if (e.key === "Enter") { removeEventListener("keydown", keys); done(true); }
+    };
+    addEventListener("keydown", keys);
+    back.querySelector("#aOk").focus();
+  });
+}
+
+/** Saisie de texte, même raison que ask() : prompt() ne s'affiche pas non plus
+ *  dans WKWebView. Rend la chaîne saisie, ou null si on annule. */
+function askText(title, body, { placeholder = "", initial = "", multi = false } = {}) {
+  return new Promise((resolve) => {
+    const back = document.createElement("div"); back.className = "modal";
+    const field = multi
+      ? `<textarea id="tI" rows="8" placeholder="${esc(placeholder)}"></textarea>`
+      : `<input id="tI" placeholder="${esc(placeholder)}" autocomplete="off">`;
+    back.innerHTML = `<div class="sheetlet">
+      <div class="mt">${esc(title)}</div>
+      ${body ? `<div class="mn">${esc(body)}</div>` : ""}
+      <label>${field}</label>
+      <div class="ma"><button id="tX">Annuler</button>
+        <button id="tOk" class="primary">Valider</button></div></div>`;
+    document.body.appendChild(back);
+    const input = back.querySelector("#tI");
+    input.value = initial;
+    const done = (v) => { back.remove(); resolve(v); };
+    back.querySelector("#tOk").onclick = () => done(input.value);
+    back.querySelector("#tX").onclick = () => done(null);
+    back.onclick = (e) => { if (e.target === back) done(null); };
+    input.onkeydown = (e) => {
+      if (e.key === "Escape") done(null);
+      // Sur une seule ligne, Entrée valide. Sur un pavé de texte elle sert à
+      // aller à la ligne — c'est ⌘Entrée qui valide.
+      if (e.key === "Enter" && (!multi || e.metaKey || e.ctrlKey)) { e.preventDefault(); done(input.value); }
+    };
+    input.focus();
+  });
+}
+
+/** Choix offert une seule fois, dans une vraie fenêtre de l'app.
+ *
+ *  `confirm()` du navigateur n'a rien à faire ici : WKWebView ne l'affiche pas
+ *  toujours et renvoie alors « non » sans que personne n'ait rien vu — c'est ce
+ *  qui produisait « échec — modèle indisponible » à la seconde même où on
+ *  arrêtait l'enregistrement. */
+function askModel() {
+  return new Promise((resolve) => {
+    const back = document.createElement("div"); back.className = "modal";
+    back.innerHTML = `<div class="sheetlet">
+      <div class="mt">Transcrire sur cette machine ?</div>
+      <div class="mn">Le moteur local télécharge son modèle une fois — 574 Mo.
+        Ensuite tout se fait hors ligne, gratuitement, et l'audio du cours ne quitte
+        jamais ton ordinateur.</div>
+      <div class="ma">
+        <button id="mSrv">Passer par le serveur</button>
+        <button id="mGo" class="primary">Télécharger le modèle</button>
+      </div></div>`;
+    document.body.appendChild(back);
+    const done = (choice) => { back.remove(); resolve(choice); };
+    back.querySelector("#mGo").onclick = () => done("download");
+    back.querySelector("#mSrv").onclick = () => done("server");
+    back.onclick = (e) => { if (e.target === back) done("server"); };
+  });
+}
+
+/** true : le moteur natif est prêt. false : transcris par le serveur. */
 async function ensureModel() {
   if (native.model) return true;
-  if (!confirm("Le moteur de transcription doit télécharger son modèle une fois : "
-    + "574 Mo, puis tout fonctionne hors ligne et sans rien payer.\n\nLancer le téléchargement ?")) return false;
+  // Un refus vaut pour la séance : on ne redemande pas à chaque partie de
+  // cinq minutes, ce serait insupportable au milieu d'un cours.
+  if (native.declined) return false;
+  if (await askModel() !== "download") { native.declined = true; return false; }
   const un = await T.event.listen("model-progress", (e) => {
     $("status").textContent = `téléchargement du modèle — ${e.payload} %`;
   });
   try {
     await T.core.invoke("download_model");
     native.model = true;
+    $("status").textContent = "modèle prêt — transcription sur cette machine";
+    checkEngine();
     return true;
   } catch (e) {
-    $("status").innerHTML = `<span class="err">téléchargement échoué : ${esc(String(e))}</span>`;
+    // Un téléchargement raté ne doit pas perdre le cours : le serveur prend
+    // le relais pour cette séance.
+    native.declined = true;
+    $("status").innerHTML = `<span class="err">téléchargement échoué (${esc(String(e))}) —
+      transcription par le serveur pour cette séance</span>`;
     return false;
   } finally { un(); }
 }
 
 async function checkEngine() {
   try {
+    await checkCompatibility();
     await probeNative();
-    if (native.available) {
+    if (native.available && !native.declined) {
       $("engine").textContent = native.model
         ? `moteur local · whisper turbo · ${native.sizeMb} Mo`
         : "moteur local — modèle à télécharger";
@@ -758,7 +962,11 @@ function docRow(d) {
   el.className = "rw"; el.draggable = true;
   const when = d.savedAt ? new Date(d.savedAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) : "—";
   const place = [d.course, d.chapter].filter(Boolean).join(" / ") || "non classée";
-  el.innerHTML = `<span class="nm">${esc(d.title)}</span><span class="sub">${esc(place)}</span>
+  // Une séance partagée annonce ses contributeurs — c'est la marque qu'elle est
+  // commune à la promo, pas un document solo.
+  const who = (d.contributors && d.contributors.length)
+    ? `<span class="who" title="${esc(d.contributors.join(", "))}">👥 ${d.contributors.length}${d.recordingCount ? " · " + d.recordingCount + " audio" : ""}</span>` : "";
+  el.innerHTML = `<span class="nm">${esc(d.title)}${who}</span><span class="sub">${esc(place)}</span>
     <span class="dt">${when}</span><span class="bl">${d.blocks}</span>
     <span class="act"><button class="sm ghost mv" title="Ranger">⇄</button>
     <button class="sm ghost del" title="Supprimer">✕</button></span>`;
@@ -769,7 +977,9 @@ function docRow(d) {
   el.querySelector(".mv").onclick = (e) => { e.stopPropagation(); openMove(d); };
   el.querySelector(".del").onclick = async (e) => {
     e.stopPropagation();
-    if (!confirm(`Supprimer « ${d.title} » ? C'est définitif.`)) return;
+    if (!await ask("Supprimer cette séance ?",
+                   `« ${d.title} » — notes, transcription et audio. C'est définitif.`,
+                   "Supprimer", true)) return;
     await fetch(api("/delete"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: d.id }) });
     loadLibrary();
   };
@@ -837,7 +1047,10 @@ function renderTree() {
 const LANG_KEY = "amphi.lang";
 try {
   const saved = localStorage.getItem(LANG_KEY);
-  if (saved) $("langSel").value = saved;
+  // « auto » restait collé au réglage d'avant et rendait des notes françaises
+  // sur un cours anglais. L'anglais est la valeur par défaut ; un choix
+  // explicite, lui, est respecté.
+  if (saved && saved !== "auto") $("langSel").value = saved;
 } catch { /* navigation privée */ }
 $("langSel").addEventListener("change", () => {
   try { localStorage.setItem(LANG_KEY, $("langSel").value); } catch { /* ignore */ }
@@ -878,10 +1091,28 @@ function mark(snippet, query) {
 async function openDoc(id) {
   const s = await (await fetch(api(`/load?id=${encodeURIComponent(id)}`))).json();
   if (s.empty) return;
-  Object.assign(state, { id, segments: s.segments ?? [], attachments: s.attachments ?? [],
-                         doc: s.doc ?? null, diagrams: s.diagrams ?? [], images: s.images ?? [],
-                         parts: (s.parts ?? []).map((p) => ({ ...p, state: p.url ? "audio conservé" : "audio expiré" })) });
-  $("player").hidden = true; $("player").removeAttribute("data-url");
+  // Deux formes de fichier : une SÉANCE partagée (recordings/contributeurs) ou
+  // un ancien document solo (parts/segments). On ouvre les deux, mais une séance
+  // reste une séance — on peut y contribuer encore.
+  if (s.sessionKey) {
+    state.sessionKey = s.sessionKey; state.schedule = s.schedule ?? null;
+    Object.assign(state, { id, doc: s.doc ?? null, diagrams: [], images: [], consensus: s.consensus ?? null,
+      attachments: (s.attachments ?? []).map((a) => ({ name: a.name, text: a.text, kind: a.kind, by: a.by, preview: a.preview })),
+      segments: s.consensus?.segments ?? mergedFromRecordings(s.recordings ?? []),
+      parts: (s.recordings ?? []).map((r, i) => ({ seq: i, startMs: r.startMs ?? 0, endMs: r.endMs, url: r.url,
+        mime: r.mime, by: r.by, state: `${(r.segments ?? []).length} segments · ${r.by ?? "?"}` })) });
+  } else {
+    state.sessionKey = null; state.schedule = null;
+    Object.assign(state, { id, segments: s.segments ?? [], attachments: s.attachments ?? [],
+                         doc: s.doc ?? null, diagrams: s.diagrams ?? [], images: s.images ?? [], consensus: null,
+                         parts: (s.parts ?? []).map((p) => ({
+                           ...p,
+                           state: !p.url ? "audio expiré"
+                             : p.failed ? "à transcrire — audio conservé"
+                             : "audio conservé",
+                           failed: !!p.failed && !!p.url })) });
+  }
+  $("player").hidden = true; $("player").removeAttribute("data-seq");
   renderParts();
   $("docTitle").value = s.doc?.title ?? "";
   $("docCourse").value = s.course ?? ""; $("docChapter").value = s.chapter ?? "";
@@ -890,7 +1121,9 @@ async function openDoc(id) {
   $("attachments").innerHTML = "";
   state.attachments.forEach((a, i) => {
     const c = document.createElement("div"); c.className = "att";
-    c.innerHTML = `<div class="top"><b>${esc(a.name)}</b><span class="tag">a${i}</span></div><pre>${esc(a.text.slice(0, 700))}</pre>`;
+    c.innerHTML = `<div class="top"><b>${esc(a.name)}</b><span class="tag">a${i}</span></div>`
+      + (a.preview ? `<img src="${a.preview}" alt="">` : "")
+      + `<pre>${esc(a.text.slice(0, 700))}</pre>`;
     $("attachments").appendChild(c);
   });
   if (state.segments.length) {
@@ -914,63 +1147,235 @@ async function openDoc(id) {
  */
 $("newBtn").onclick = () => openNew();
 
-function openNew() {
-  const courses = [...new Set(lib.docs.map((d) => (d.course || "").trim()).filter(Boolean))].sort();
-  const chaptersOf = (course) => [...new Set(lib.docs
-    .filter((d) => !course || (d.course || "").trim() === course)
-    .map((d) => (d.chapter || "").trim()).filter(Boolean))].sort();
+// ───────────────────────────── la séance partagée ─────────────────────────
+//
+// Une séance est un cours réel, partagé par toute la promo. Chaque étudiant y
+// verse ses contributions ; il n'en sort qu'un document. Ces fonctions parlent
+// aux endpoints du serveur (/contribute, /session-notes, /sessions, /schedule).
 
-  // Le dossier ouvert sert de proposition — « nouveau fichier ici ».
-  const preCourse = lib.course && lib.course !== "Sans matière" ? lib.course : "";
-  const preChapter = lib.chapter && lib.chapter !== "Sans chapitre" ? lib.chapter : "";
+const ME_KEY = "amphi.me";
+
+/** Nom d'affichage de l'étudiant, demandé une seule fois. Sert à attribuer les
+ *  contributions — « l'audio de Léa », « la photo de Léo ». */
+async function ensureContributor() {
+  if (state.contributor) return state.contributor;
+  let me = null;
+  try { me = localStorage.getItem(ME_KEY); } catch { /* navigation privée */ }
+  if (!me) {
+    me = await askText("Ton nom", "Pour attribuer tes contributions à la séance partagée. Ton prénom suffit.",
+                       { placeholder: "Léo" });
+    me = (me || "").trim();
+    if (me) { try { localStorage.setItem(ME_KEY, me); } catch { /* ignore */ } }
+  }
+  state.contributor = me || "anonyme";
+  return state.contributor;
+}
+
+/** Rattache l'app à une séance : c'est ELLE qui range l'audio et reçoit les
+ *  contributions. Si la séance existe déjà sur le serveur, on charge ce que la
+ *  promo y a déjà mis pour ne pas repartir d'une page blanche. */
+async function joinSession(key, schedule) {
+  state.sessionKey = key;
+  state.id = key;                       // l'audio et le /load se rangent sous cette clé
+  state.schedule = schedule ?? null;
+  const s = await (await fetch(api(`/load?id=${encodeURIComponent(key)}`))).json();
+  if (!s.empty && s.sessionKey) {
+    state.schedule = state.schedule ?? s.schedule ?? null;
+    state.attachments = (s.attachments ?? []).map((a) => ({ name: a.name, text: a.text, kind: a.kind, by: a.by, preview: a.preview }));
+    state.consensus = s.consensus ?? null;
+    state.segments = s.consensus?.segments ?? mergedFromRecordings(s.recordings ?? []);
+    state.parts = (s.recordings ?? []).map((r, i) => ({
+      seq: i, startMs: r.startMs ?? 0, endMs: r.endMs, url: r.url, mime: r.mime,
+      by: r.by, state: `${(r.segments ?? []).length} segments · ${r.by ?? "?"}` }));
+    state.doc = s.doc ?? null;
+  } else {
+    Object.assign(state, { attachments: [], segments: [], parts: [], doc: null, consensus: null });
+  }
+  state.diagrams = []; state.images = [];
+}
+
+/** Union ordonnée des paroles de tous les enregistrements d'une séance. */
+function mergedFromRecordings(recordings) {
+  const out = [];
+  for (const r of recordings) for (const seg of (r.segments ?? [])) out.push({ ...seg, by: r.by, rec: r.id });
+  return out.sort((a, b) => (a.startMs ?? 0) - (b.startMs ?? 0));
+}
+
+/** Envoie une contribution au pot commun de la séance, sans écraser les autres. */
+async function contribute(kind, payload, queueOpts = {}) {
+  if (!state.sessionKey) return null;
+  const body = { sessionKey: state.sessionKey, contributor: state.contributor || "anonyme",
+                 schedule: state.schedule || undefined, kind, payload };
+  let queued = null;
+  // Dans l'application de bureau, on écrit d'abord l'enveloppe sur disque. Une
+  // coupure après cette ligne ne peut donc plus faire disparaître le transcript.
+  if (T?.core?.invoke && API) {
+    queued = await T.core.invoke("queue_contribution", {
+      endpoint: api("/contribute"), payload: body,
+      audioPath: queueOpts.audioPath ?? null, audioEndpoint: queueOpts.audioEndpoint ?? null });
+  }
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (queued?.idempotency_key) headers["Idempotency-Key"] = queued.idempotency_key;
+    const r = await fetch(api("/contribute"), { method: "POST", headers, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? `HTTP ${r.status}`);
+    if (queued && T?.core?.invoke) await T.core.invoke("acknowledge_contribution", { idempotencyKey: queued.idempotency_key });
+    return (await r.json()).session;
+  } catch (e) {
+    if (queued) throw new Error(`${e.message} · contribution mise en attente`);
+    throw e;
+  }
+}
+
+async function flushDesktopQueue() {
+  if (!T?.core?.invoke || !API) return;
+  try {
+    await T.core.invoke("flush_contribution_queue", { token: globalThis.AMPHI_TOKEN || null, auth: globalThis.AMPHI_AUTH || null });
+  } catch { /* réseau encore indisponible : le prochain événement réessaiera */ }
+}
+window.addEventListener("online", flushDesktopQueue);
+flushDesktopQueue();
+
+function todayISO() {
+  const d = new Date(); const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function localSlug(t) {
+  return (t || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "cours";
+}
+
+/** Même règle que le serveur : cours + jour + créneau arrondi au quart d'heure.
+ *  C'est ce qui fait qu'une séance manuelle et son équivalent à l'agenda tombent
+ *  sur la même clé. */
+function keyFor(course, when) {
+  const d = when ? new Date(when) : new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  // Le serveur indexe les ICS en UTC. La séance manuelle doit encoder le même
+  // instant — pas l'heure affichée par le Mac — sinon 14 h à Lyon deviendrait une
+  // deuxième séance à côté du créneau agenda de 12 h UTC.
+  const mm = p(Math.floor(d.getUTCMinutes() / 15) * 15);
+  return `${localSlug(course)}-${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}-${p(d.getUTCHours())}${mm}`;
+}
+
+function hhmm(iso) {
+  if (!iso) return "";
+  try { return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }); }
+  catch { return ""; }
+}
+
+/** Ouvre une séance dans l'interface : vide l'écran, charge ce qui existe. */
+function enterSession() {
+  $("docCourse").value = state.schedule?.course ?? "";
+  $("docChapter").value = "";
+  $("docTitle").value = state.doc?.title ?? state.schedule?.title ?? "";
+  $("attachments").innerHTML = "";
+  state.attachments.forEach((a, i) => {
+    const c = document.createElement("div"); c.className = "att";
+    c.innerHTML = `<div class="top"><b>${esc(a.name)}</b><span class="tag">a${i}${a.by ? " · " + esc(a.by) : ""}</span></div>`
+      + (a.preview ? `<img src="${a.preview}" alt="">` : "") + `<pre>${esc((a.text || "").slice(0, 700))}</pre>`;
+    $("attachments").appendChild(c);
+  });
+  renderParts();
+  if (state.segments.length) {
+    renderTranscript({ segments: state.segments, audioDurationMs: state.segments.at(-1).endMs, processingMs: 1 }, 0);
+  } else { $("transcript").innerHTML = `<div class="empty">Rien encore.</div>`; $("tStats").hidden = true; }
+  if (state.doc) renderSheet();
+  else $("sheet").innerHTML = `<div class="empty"><b>${esc(state.schedule?.course || "Séance prête")}.</b>
+    ${state.schedule?.start ? "Cours de " + hhmm(state.schedule.start) + ". " : ""}
+    Appuie sur le bouton rouge pour enregistrer — ou dépose des photos, un PDF, un diaporama à gauche.
+    Tout ce que tu ajoutes rejoint la séance partagée de la promo.</div>`;
+  $("player").hidden = true; $("player").removeAttribute("data-seq");
+  $("timer").textContent = "00:00"; $("saveState").textContent = "";
+  updateRecStatus(); refresh(); show("ses"); applySolo(false);
+}
+
+function unfoldIcs(text) { const out=[]; for (const line of text.replace(/\r\n?/g,"\n").split("\n")) { if (/^[ \t]/.test(line)&&out.length) out[out.length-1]+=line.slice(1); else out.push(line); } return out; }
+function unescapeIcs(v) { return v.replace(/\\([,;\\nN])/g,(_,c)=>/[nN]/.test(c)?" ":c).trim(); }
+function parseIcsDate(v, params) { v=v.trim(); if (/^\d{8}$/.test(v)) return `${v.slice(0,4)}-${v.slice(4,6)}-${v.slice(6,8)}T00:00:00Z`; const m=v.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/); if(!m)return null; const iso=`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`; if(m[7]==="Z")return iso+"Z"; const tz=(params.match(/(?:^|;)TZID=([^;]+)/i)||[])[1]; if(!tz||tz==="Europe/Paris"){const probe=new Date(iso+"Z"),parts=new Intl.DateTimeFormat("en-US",{timeZone:"Europe/Paris",timeZoneName:"shortOffset",hour12:false,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"}).formatToParts(probe),off=(parts.find(p=>p.type==="timeZoneName")?.value||"GMT+1").replace("GMT",""); const sign=off.startsWith("-")?-1:1,[h,min="0"]=off.replace(/^[+-]/,"").split(":"); return new Date(probe.getTime()-sign*(Number(h)*60+Number(min))*60000).toISOString();} return iso; }
+async function importSchedule() { const input=document.createElement("input"); input.type="file"; input.accept=".ics,text/calendar"; input.click(); input.onchange=async()=>{const file=input.files?.[0];if(!file)return;try{const events=[];let ev=null;for(const line of unfoldIcs(await file.text())){if(line==="BEGIN:VEVENT"){ev={};continue;}if(line==="END:VEVENT"){if(ev?.summary&&ev.start)events.push({id:ev.uid,course:ev.summary,start:ev.start,end:ev.end,location:ev.location});ev=null;continue;}if(!ev||!line.includes(":"))continue;const [name,...rest]=line.split(":"),value=rest.join(":"),[key,...params]=name.split(";"),k=key.toUpperCase();if(k==="SUMMARY")ev.summary=unescapeIcs(value);else if(k==="UID")ev.uid=value.trim();else if(k==="LOCATION")ev.location=unescapeIcs(value);else if(k==="DTSTART"||k==="DTEND")ev[k==="DTSTART"?"start":"end"]=parseIcsDate(value,params.join(";"));}if(!events.length)throw new Error("Aucun événement exploitable (résumé et dates requis).");const r=await fetch(api("/schedule/import/me"),{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({source:file.name,events})}),res=await r.json();if(!r.ok)throw new Error(res.error??`HTTP ${r.status}`);await ask("Agenda importé",`${res.added} cours ajoutés, ${res.updated} mis à jour dans ton agenda privé.`,"OK");}catch(e){await ask("Échec de l'import",String(e.message??e),"OK");}}; }
+
+async function openNew() {
+  await ensureContributor();
+  // Ce que l'agenda et la promo proposent, en parallèle.
+  const [sched, opened] = await Promise.all([
+    fetch(api("/schedule?at=" + new Date().toISOString())).then((r) => r.json()).catch(() => ({ now: [] })),
+    fetch(api("/sessions?on=" + todayISO())).then((r) => r.json()).catch(() => ({ sessions: [] })),
+  ]);
+  const now = sched.now ?? [];
+  const openKeys = new Set((opened.sessions ?? []).map((s) => s.sessionKey));
+
+  const rowNow = (e) => `<button class="joinrow" data-k="${esc(e.sessionKey)}" data-src="sched">
+      <span class="jt">${esc(e.course)}</span>
+      <span class="jm">${hhmm(e.start)}${e.location ? " · " + esc(e.location) : ""}${openKeys.has(e.sessionKey) ? " · déjà ouverte" : ""}</span>
+      <span class="jgo">${openKeys.has(e.sessionKey) ? "Rejoindre" : "Enregistrer"}</span></button>`;
+  const rowOpen = (s) => `<button class="joinrow" data-k="${esc(s.sessionKey)}" data-src="open">
+      <span class="jt">${esc(s.course || s.title || s.sessionKey)}</span>
+      <span class="jm">${s.contributors?.length || 0} contributeur(s) · ${s.recordingCount || 0} audio · ${s.attachmentCount || 0} doc</span>
+      <span class="jgo">Rejoindre</span></button>`;
+  // Les séances déjà listées « en ce moment » ne sont pas répétées plus bas.
+  const others = (opened.sessions ?? []).filter((s) => !now.some((e) => e.sessionKey === s.sessionKey));
 
   const back = document.createElement("div"); back.className = "modal";
-  back.innerHTML = `<div class="sheetlet">
-    <div class="mt">Nouvelle séance</div>
-    <div class="mn">Où la ranger ?</div>
-    <label>Matière<input id="nC" list="nCl" value="${esc(preCourse)}" placeholder="Business, Mathématiques…" autocomplete="off"></label>
-    <datalist id="nCl">${courses.map((c) => `<option value="${esc(c)}">`).join("")}</datalist>
-    <label>Chapitre<input id="nH" list="nHl" value="${esc(preChapter)}" placeholder="Chapitre 3, Semaine 5…" autocomplete="off"></label>
-    <datalist id="nHl"></datalist>
-    <label>Titre de la séance<input id="nT" placeholder="laisse vide, l'IA le proposera" autocomplete="off"></label>
-    <div class="hintline" id="nHint"></div>
-    <div class="ma"><button id="nX">Annuler</button><button id="nOk" class="primary">Créer</button></div>
-  </div>`;
+  back.innerHTML = `<div class="sheetlet wide">
+    <div class="mt">Rejoindre un cours</div>
+    <div class="mn">Tout le monde enregistre le même cours dans la même séance : une seule prise de notes pour la promo.</div>
+    ${now.length ? `<div class="jsec">En ce moment</div>${now.map(rowNow).join("")}` : ""}
+    ${others.length ? `<div class="jsec">Séances ouvertes aujourd'hui</div>${others.map(rowOpen).join("")}` : ""}
+    ${!now.length && !others.length ? `<div class="jempty">Aucun cours à l'agenda ni séance ouverte.<br>Importe ton emploi du temps, ou crée une séance à la main.</div>` : ""}
+    <div class="ma">
+      <button id="nX">Annuler</button>
+      <button id="nIcs">Importer mon agenda</button>
+      <button id="nManual">Séance manuelle</button>
+    </div></div>`;
   document.body.appendChild(back);
-
-  const cIn = back.querySelector("#nC"), hIn = back.querySelector("#nH"), list = back.querySelector("#nHl");
-  // Les chapitres proposés dépendent de la matière saisie : proposer ceux d'un
-  // autre cours ne ferait que créer des doublons.
-  const refreshChapters = () => {
-    list.innerHTML = chaptersOf(cIn.value.trim()).map((c) => `<option value="${esc(c)}">`).join("");
-    const known = courses.includes(cIn.value.trim());
-    back.querySelector("#nHint").textContent = !cIn.value.trim() ? "Sans matière, la séance restera à la racine."
-      : known ? `Matière existante — ${chaptersOf(cIn.value.trim()).length} chapitre(s) déjà dedans.`
-      : "Nouvelle matière : elle sera créée.";
-  };
-  cIn.addEventListener("input", refreshChapters);
-  refreshChapters();
-
   const close = () => back.remove();
   back.onclick = (e) => { if (e.target === back) close(); };
   back.querySelector("#nX").onclick = close;
-  back.addEventListener("keydown", (e) => { if (e.key === "Enter") back.querySelector("#nOk").click(); });
-  cIn.focus(); cIn.select();
+  back.querySelector("#nIcs").onclick = () => { close(); importSchedule(); };
+  back.querySelector("#nManual").onclick = () => { close(); openManual(); };
 
-  back.querySelector("#nOk").onclick = () => {
-    Object.assign(state, { id: null, segments: [], attachments: [], doc: null,
-                           diagrams: [], images: [], parts: [] });
-    $("docCourse").value = cIn.value.trim();
-    $("docChapter").value = hIn.value.trim();
-    $("docTitle").value = back.querySelector("#nT").value.trim();
-    $("attachments").innerHTML = ""; $("parts").innerHTML = "";
-    $("transcript").innerHTML = `<div class="empty">Rien encore.</div>`; $("tStats").hidden = true;
-    $("sheet").innerHTML = `<div class="empty"><b>Séance prête.</b>
-      Appuie sur le bouton rouge pour enregistrer le cours, ou dépose un document à gauche.</div>`;
-    $("player").hidden = true; $("player").removeAttribute("data-url");
-    $("timer").textContent = "00:00"; $("saveState").textContent = "";
-    close(); updateRecStatus(); refresh(); show("ses"); applySolo(false);
+  for (const btn of back.querySelectorAll(".joinrow")) {
+    btn.onclick = async () => {
+      const key = btn.dataset.k;
+      const entry = now.find((e) => e.sessionKey === key);
+      btn.querySelector(".jgo").textContent = "…";
+      try {
+        await joinSession(key, entry ? { course: entry.course, title: entry.course, start: entry.start,
+                                          location: entry.location } : null);
+        close(); enterSession();
+      } catch (e) { btn.querySelector(".jgo").textContent = "échec"; }
+    };
+  }
+}
+
+/** L'ancien formulaire : une séance sans agenda, nommée à la main. */
+function openManual() {
+  const courses = [...new Set(lib.docs.map((d) => (d.course || "").trim()).filter(Boolean))].sort();
+  const back = document.createElement("div"); back.className = "modal";
+  back.innerHTML = `<div class="sheetlet">
+    <div class="mt">Séance manuelle</div>
+    <div class="mn">Un cours qui n'est pas à ton agenda. La clé se déduit du titre et de l'heure — un camarade qui crée le même cours à la même heure te rejoint automatiquement.</div>
+    <label>Matière<input id="nC" list="nCl" placeholder="Machine Learning…" autocomplete="off"></label>
+    <datalist id="nCl">${courses.map((c) => `<option value="${esc(c)}">`).join("")}</datalist>
+    <label>Titre (facultatif)<input id="nT" placeholder="laisse vide, l'IA le proposera" autocomplete="off"></label>
+    <div class="ma"><button id="nX">Annuler</button>
+      <button id="nOk" class="primary">Créer la séance</button></div></div>`;
+  document.body.appendChild(back);
+  const cIn = back.querySelector("#nC");
+  const close = () => back.remove();
+  back.onclick = (e) => { if (e.target === back) close(); };
+  back.querySelector("#nX").onclick = close;
+  cIn.focus();
+  back.querySelector("#nOk").onclick = async () => {
+    const course = cIn.value.trim() || "Séance";
+    const key = keyFor(course);
+    await joinSession(key, { course, title: back.querySelector("#nT").value.trim() || course,
+                             start: new Date().toISOString() });
+    close(); enterSession();
   };
+  back.addEventListener("keydown", (e) => { if (e.key === "Enter") back.querySelector("#nOk").click(); });
 }
 
 // ------------------------------------------------------------ capture
@@ -985,6 +1390,9 @@ function openNew() {
 // est un trou de quelques centaines de millisecondes entre deux parties,
 // sans conséquence sur des notes de cours.
 const PART_MS = 5 * 60 * 1000;
+// En dessous, le conteneur ne porte pas même une seconde de parole : c'est une
+// queue de flux, pas un morceau de cours.
+const MIN_PART_BYTES = 2048;
 const BARS = 24;
 const bars = Array.from({ length: BARS }, () => { const b = document.createElement("div"); b.className = "bar"; $("levelWrap").appendChild(b); return b; });
 
@@ -1024,9 +1432,11 @@ async function startRec() {
   } catch { state.lexicon = []; }
 
   state.recording = true;
+  state.micWarned = false;
   state.partBase = state.segments.length ? state.segments.at(-1).endMs : 0;
   state.startedAt = Date.now();
   recordPart();
+  watchMic();
   draw();
 
   $("recBtn").classList.add("recording"); $("recBtn").textContent = "■";
@@ -1041,25 +1451,60 @@ function recordPart() {
   const rec = new MediaRecorder(state.stream, { mimeType: mime, audioBitsPerSecond: 32000 });
   const chunks = [];
   const partStart = state.partBase + (Date.now() - state.startedAt);
-  rec.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
+  rec.ondataavailable = (e) => {
+    if (e.data.size > 0) { chunks.push(e.data); state.lastChunkAt = Date.now(); }
+  };
+  // Le micro peut être coupé en cours de route — une autre app le prend, le
+  // Mac se met en veille, le casque se déconnecte. Sans ça, l'enregistrement
+  // continue de tourner à vide : 22 minutes au compteur, 4 minutes de son.
+  for (const track of state.stream.getAudioTracks()) {
+    track.onmute = () => micLost("micro coupé");
+    track.onended = () => micLost("micro déconnecté");
+  }
   rec.onstop = () => {
     clearTimeout(state.partTimer);
-    if (chunks.length) enqueuePart(new Blob(chunks, { type: mime }), mime, partStart);
+    const blob = chunks.length ? new Blob(chunks, { type: mime }) : null;
+    // MediaRecorder émet après la fin du flux une queue de quelques octets —
+    // un élément WebM « Cues » vide, sans en-tête ni son. Arrêter juste après
+    // le début d'une partie ne produisait que ça : une partie de cinq octets,
+    // impossible à décoder, affichée en échec alors qu'il n'y avait rien à
+    // transcrire. On ne la crée pas.
+    if (blob && blob.size >= MIN_PART_BYTES) enqueuePart(blob, mime, partStart);
     if (state.recording) recordPart();
     else {
       state.stream.getTracks().forEach((t) => t.stop());
       state.audioCtx?.close();
     }
   };
-  rec.start();
+  // Découpage en tranches d'une seconde plutôt qu'un seul bloc à l'arrêt :
+  // ce qui a été capté est déjà en main si le flux s'interrompt, et l'absence
+  // de tranche devient un signal qu'on peut surveiller.
+  rec.start(1000);
   state.rec = rec;
+  state.lastChunkAt = Date.now();
   state.partTimer = setTimeout(() => rec.stop(), PART_MS);
+}
+
+/** Le flux s'est tu : on le dit tout de suite, au lieu de le découvrir après le cours. */
+function micLost(why) {
+  if (!state.recording || state.micWarned) return;
+  state.micWarned = true;
+  $("status").innerHTML = `<span class="err">${esc(why)} — l'enregistrement ne capte plus rien.
+    Arrête, vérifie l'entrée audio, et reprends : ce qui est déjà transcrit est conservé.</span>`;
+}
+
+/** Aucune tranche depuis dix secondes alors qu'on enregistre : le flux est mort. */
+function watchMic() {
+  if (!state.recording) return;
+  if (state.lastChunkAt && Date.now() - state.lastChunkAt > 10000) micLost("aucun son depuis 10 s");
+  state.micWatch = setTimeout(watchMic, 3000);
 }
 
 function stopRec() {
   state.recording = false;
   clearInterval(state.timer);
   clearTimeout(state.partTimer);
+  clearTimeout(state.micWatch);
   state.rec?.stop();
   $("recBtn").classList.remove("recording"); $("recBtn").textContent = "●";
   updateRecStatus();
@@ -1067,11 +1512,42 @@ function stopRec() {
 
 /** File d'attente : une partie à la fois, pour ne pas saturer le moteur local. */
 async function enqueuePart(blob, mime, startMs) {
-  const part = { seq: state.parts.length, startMs, blob,
-                 url: URL.createObjectURL(blob), state: "en attente" };
+  const part = { seq: state.parts.length, startMs, blob, mime,
+                 blobUrl: URL.createObjectURL(blob), state: "en attente" };
   state.parts.push(part);
   renderParts();
-  state.queue = (state.queue ?? Promise.resolve()).then(() => transcribePart(part, mime));
+  // L'ordre compte : on met l'audio à l'abri, PUIS on le transcrit. L'inverse
+  // — ce qu'on faisait — perdait l'enregistrement quand la transcription
+  // échouait, alors que le fichier était là, intact, dans la mémoire de la page.
+  state.queue = (state.queue ?? Promise.resolve())
+    .then(() => storePart(part))
+    .then(() => transcribePart(part, mime));
+}
+
+/** Envoie l'audio au serveur dès qu'il existe, avant toute transcription. */
+async function storePart(part) {
+  part.state = "sauvegarde…"; renderParts();
+  if (T?.core?.invoke && API && !part.audioPath) {
+    const encoded = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",", 2)[1] || "");
+      reader.onerror = () => reject(reader.error || new Error("lecture audio impossible"));
+      reader.readAsDataURL(part.blob);
+    });
+    part.audioPath = await T.core.invoke("stage_audio", { blobBase64: encoded, extension: part.mime.split("/")[1]?.split(";")[0] || "webm" });
+  }
+  try {
+    const up = await fetch(
+      api(`/audio?id=${encodeURIComponent(state.id)}&seq=${part.seq}&mime=${encodeURIComponent(part.mime)}`),
+      { method: "POST", body: part.blob, headers: { "Content-Type": "application/octet-stream" } });
+    if (!up.ok) throw new Error(`HTTP ${up.status}`);
+    part.url = (await up.json()).url;
+    part.stored = true;
+  } catch (e) {
+    // Pas bloquant : le blob reste en mémoire et la transcription peut suivre.
+    part.storeError = String(e.message ?? e);
+  }
+  renderParts();
 }
 
 async function transcribePart(part, mime) {
@@ -1088,11 +1564,22 @@ async function transcribePart(part, mime) {
     if (tail) headers["X-Previous-Text"] = tail;
 
     let res;
-    if (native.available) {
+    // Le moteur natif s'il a son modèle ; sinon le serveur, qui tourne de
+    // toute façon. Aucune de ces deux voies ne doit faire perdre un cours.
+    let pcm = null;
+    if (native.available && await ensureModel()) {
+      try {
+        pcm = await blobToPcm16(part.blob);
+      } catch (e) {
+        // Le décodeur du navigateur est plus fragile que celui du serveur, qui
+        // s'appuie sur ffmpeg. Un conteneur qu'il refuse n'est pas une raison
+        // de perdre la partie : on la fait transcrire à côté.
+        part.state = `décodage local refusé — envoi au serveur`; renderParts();
+      }
+    }
+    if (pcm !== null) {
       // Transcription ici même : gratuite, hors ligne, et l'audio ne quitte
       // pas la machine de l'étudiant.
-      if (!(await ensureModel())) throw new Error("modèle indisponible");
-      const pcm = await blobToPcm16(part.blob);
       res = await T.core.invoke("transcribe_native", {
         pcmBase64: pcm,
         language: lang && lang !== "auto" ? lang : null,
@@ -1112,21 +1599,36 @@ async function transcribePart(part, mime) {
     }
     part.endMs = part.startMs + res.audioDurationMs;
     part.state = `${res.segments.length} segments`;
-    // L'audio part sur le serveur une fois la transcription réussie : on ne
-    // stocke pas ce qu'on n'a pas pu exploiter.
+    if (!part.stored) await storePart(part);
+    // Cette partie rejoint le pot commun de la séance. Un enregistrement = une
+    // contribution, identifiée par la clé de séance + le nom + le numéro de
+    // partie, pour que la fusion serveur sache la dédupliquer.
     try {
-      const up = await fetch(api(`/audio?id=${encodeURIComponent(state.id)}&seq=${part.seq}&mime=${encodeURIComponent(mime)}`),
-        { method: "POST", body: part.blob, headers: { "Content-Type": "application/octet-stream" } });
-      if (up.ok) part.url = (await up.json()).url;
-    } catch { /* l'audio local reste utilisable dans cette session */ }
-    state.segments.push(...res.segments);
-    state.segments.sort((a, b) => a.startMs - b.startMs);
+      const shared = await contribute("recording", {
+        id: `${localSlug(state.contributor || "moi")}-${part.seq}`,
+        mime: part.mime, url: part.url, startMs: part.startMs, endMs: part.endMs,
+        segments: res.segments, addedAt: new Date().toISOString() }, {
+        audioPath: part.audioPath,
+        audioEndpoint: api(`/audio?id=${encodeURIComponent(state.id)}&seq=${part.seq}&mime=${encodeURIComponent(part.mime)}`),
+      });
+      state.consensus = shared.consensus ?? null;
+      state.segments = shared.consensus?.segments ?? mergedFromRecordings(shared.recordings ?? []);
+      part.state = `${res.segments.length} segments · partagé`;
+    } catch (e) {
+      part.state = `${res.segments.length} segments · non partagé (${e.message})`;
+      state.segments.push(...res.segments);
+      state.segments.sort((a, b) => a.startMs - b.startMs);
+    }
     renderTranscript({ segments: state.segments,
                        audioDurationMs: state.segments.at(-1)?.endMs ?? 0, processingMs: 1 }, 0);
     refresh(); markDirty();
   } catch (e) {
-    part.state = `échec — ${e.message}`;
+    part.state = part.stored
+      ? `transcription en échec (${e.message}) — audio conservé`
+      : `échec — ${e.message}`;
     part.failed = true;
+    // L'audio est déjà sur le serveur (storePart) : la partie est récupérable au
+    // prochain lancement même sans transcription. Rien d'autre à sauver ici.
   }
   renderParts(); updateRecStatus();
 }
@@ -1170,7 +1672,20 @@ function renderParts() {
   for (const b of host.querySelectorAll(".pl")) b.onclick = () => seek(+b.dataset.ms);
   for (const b of host.querySelectorAll(".retry")) b.onclick = () => {
     const p = state.parts[+b.dataset.i]; p.failed = false;
-    state.queue = (state.queue ?? Promise.resolve()).then(() => transcribePart(p, p.blob.type));
+    state.queue = (state.queue ?? Promise.resolve()).then(async () => {
+      // Après un redémarrage le blob a disparu de la mémoire, mais l'audio est
+      // sur le serveur depuis l'enregistrement : on le rapatrie pour reprendre.
+      if (!p.blob && p.url) {
+        p.state = "récupération de l'audio…"; renderParts();
+        const r = await fetch(api(p.url));
+        if (!r.ok) { p.state = `audio introuvable (HTTP ${r.status})`; p.failed = true; renderParts(); return; }
+        p.blob = await r.blob();
+        p.mime ??= p.blob.type || "audio/webm";
+        p.blobUrl ??= URL.createObjectURL(p.blob);
+      }
+      if (!p.blob) { p.state = "audio perdu"; p.failed = true; renderParts(); return; }
+      await transcribePart(p, p.mime ?? p.blob.type);
+    });
   };
 }
 
@@ -1178,15 +1693,32 @@ function renderTranscript(res, wall) {
   const host = $("transcript"); host.innerHTML = "";
   if (!res.segments.length) { host.innerHTML = `<div class="empty">Aucune parole détectée.</div>`; return; }
   for (const seg of res.segments) {
-    const d = document.createElement("div"); d.className = "seg" + (seg.avgConfidence < 0.6 ? " low" : "");
+    const disputed = !!seg.isDisputed;
+    const inspectable = (seg.sources?.length ?? 0) > 1 || (seg.variants?.length ?? 0) > 0;
+    const d = document.createElement("div");
+    d.className = "seg" + (seg.avgConfidence < 0.6 ? " low" : "") + (disputed ? " disputed" : "");
     d.dataset.start = seg.startMs; d.dataset.end = seg.endMs;
-    d.innerHTML = `<time>${fmt(seg.startMs)}</time><span>${esc(seg.text)}</span>`;
+    const sourceNames = [...new Set((seg.sources ?? []).map((source) => source.by).filter(Boolean))];
+    const variants = (seg.variants ?? []).map((variant) =>
+      `<div><b>${esc(variant.chosen || "silence")}</b>${(variant.alternatives ?? []).map((alt) =>
+        `<div class="variant"><span>${esc(alt.isDeletion ? "[silence]" : alt.text)}</span>`
+        + `<span>${esc((alt.by ?? []).join(", "))} · ${Number(alt.weight ?? 0).toFixed(2)}</span></div>`).join("")}</div>`).join("");
+    const evidence = `<div class="evidence">${sourceNames.length ? `<div>Sources : ${esc(sourceNames.join(", "))}</div>` : ""}`
+      + `${disputed ? `<div>Lecture incertaine — alternatives conservées.</div>` : ""}${variants}</div>`;
+    d.innerHTML = `<time>${fmt(seg.startMs)}</time>` + (inspectable
+      ? `<details><summary>${esc(seg.text)}</summary>${evidence}</details>`
+      : `<span>${esc(seg.text)}</span>`);
     d.querySelector("time").onclick = () => seek(seg.startMs);
     host.appendChild(d);
   }
+  const stats = state.consensus?.stats ?? state.consensus ?? null;
+  const rover = stats?.mode === "rover";
   $("tStats").hidden = false;
-  $("tStats").innerHTML = `<span>durée <b>${fmt(res.audioDurationMs)}</b></span><span>segments <b>${res.segments.length}</b></span>
-    ${state.parts.length ? `<span>parties <b>${state.parts.length}</b></span>` : ""}<span>coût <b>0,00 €</b></span>`;
+  $("tStats").innerHTML = `${rover ? `<span>fusion de <b>${stats.aligned}</b> enregistrements</span>` : ""}`
+    + `<span>durée <b>${fmt(res.audioDurationMs)}</b></span><span>segments <b>${res.segments.length}</b></span>`
+    + `${state.parts.length ? `<span>parties <b>${state.parts.length}</b></span>` : ""}`
+    + `${rover && stats.disputedCount ? `<span>à vérifier <b>${stats.disputedCount}</b></span>` : ""}`
+    + `${rover && stats.excluded?.length ? `<span>exclus <b>${stats.excluded.length}</b></span>` : ""}<span>coût <b>0,00 €</b></span>`;
 }
 
 /** Un clic sur un horodatage retrouve la partie qui le contient. */
@@ -1195,13 +1727,19 @@ function seek(ms) {
             ?? state.parts.filter((p) => p.startMs <= ms).at(-1);
   const player = $("player");
   if (!part) return;
-  if (player.dataset.url !== part.url) { player.src = part.url; player.dataset.url = part.url; player.hidden = false; }
+  // Le blob de la session si on l'a encore, sinon le fichier du serveur — qui
+  // est le seul chemin après un redémarrage.
+  const src = part.blobUrl ?? (part.url ? api(part.url) : null);
+  if (!src) return;
+  if (player.dataset.seq !== String(part.seq)) {
+    player.src = src; player.dataset.seq = String(part.seq); player.hidden = false;
+  }
   player.currentTime = Math.max(0, (ms - part.startMs) / 1000);
   player.play();
 }
 
 $("player").addEventListener("timeupdate", () => {
-  const part = state.parts.find((p) => p.url === $("player").dataset.url);
+  const part = state.parts.find((p) => String(p.seq) === $("player").dataset.seq);
   if (!part) return;
   const ms = part.startMs + $("player").currentTime * 1000;
   for (const el of document.querySelectorAll(".seg"))
@@ -1215,14 +1753,70 @@ drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); handleFiles([...e.dataTransfer.files]); };
 $("fileInput").onchange = (e) => handleFiles([...e.target.files]);
+// Coller une image : le chemin le plus court depuis un téléphone. On
+// AirDrop la photo, Cmd+V, et elle est dans la séance.
+addEventListener("paste", async (e) => {
+  if ($("viewSes").classList.contains("hidden")) return;
+  const target = e.target;
+  if (target?.isContentEditable || target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") return;
+  const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+  if (!files.length) return;
+  e.preventDefault();
+  await handleFiles(files);
+});
+
 $("pasteBtn").onclick = async () => {
-  const t = prompt("Colle le texte :"); if (t?.trim()) await addAttachment({ kind: "text", name: "texte collé", text: t });
+  const t = await askText("Coller du texte", "Un extrait de polycopié, un mail du prof, tes propres notes.",
+                          { placeholder: "colle ici…", multi: true });
+  if (t?.trim()) await addAttachment({ kind: "text", name: "texte collé", text: t });
 };
 async function handleFiles(files) {
-  for (const f of files) {
-    if (f.type.startsWith("image/")) { const url = await shrink(f); await addAttachment({ kind: "image", name: f.name, dataUrl: url }, url); }
-    else await addAttachment({ kind: "text", name: f.name, text: await f.text() });
+  // Des photos d'un même cours se lisent dans l'ordre où elles ont été prises :
+  // le tableau de la fin ne vient pas avant celui du début. Le sélecteur, lui,
+  // rend les fichiers dans l'ordre où on les a cliqués.
+  const ordered = [...files].sort((a, b) => (a.lastModified ?? 0) - (b.lastModified ?? 0));
+  for (const f of ordered) {
+    if (f.type.startsWith("image/")) {
+      // Deux tailles : la grande part à la lecture automatique, la petite reste
+      // dans la séance. Une photo du tableau est la seule source d'une séance
+      // sans enregistrement — la perdre au rechargement, ce serait garder le
+      // résumé d'un cours dont on ne peut plus vérifier l'original.
+      const [full, thumb] = [await shrink(f), await shrink(f, 900, 0.7)];
+      await addAttachment({ kind: "image", name: f.name, dataUrl: full }, thumb);
+    }
+    // Un .pptx est une archive zip : le lire avec f.text() donnait du binaire
+    // illisible envoyé au modèle. Le serveur en extrait le texte, diapo par diapo.
+    // Un PDF de cours : le serveur lit le texte quand il y en a, et bascule sur
+    // la lecture visuelle quand c'est un scan.
+    else if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") {
+      await addAttachment({ kind: "pdf", name: f.name, dataUrl: await asDataUrl(f) });
+    }
+    else if (/\.(pptx|docx)$/i.test(f.name)) {
+      await addAttachment({ kind: "office", name: f.name, dataUrl: await asDataUrl(f) });
+    }
+    else if (/\.(txt|md|csv|tex)$/i.test(f.name) || f.type.startsWith("text/")) {
+      await addAttachment({ kind: "text", name: f.name, text: await f.text() });
+    }
+    // Refuser franchement vaut mieux que produire des notes à partir de binaire
+    // décodé en texte — c'est ce qui faisait « buguer » l'ajout d'un diaporama.
+    else showRejected(f.name);
   }
+}
+
+function asDataUrl(file) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result);
+    fr.onerror = () => rej(new Error("lecture impossible"));
+    fr.readAsDataURL(file);
+  });
+}
+
+function showRejected(name) {
+  const card = document.createElement("div"); card.className = "att";
+  card.innerHTML = `<div class="top"><b>${esc(name)}</b><span class="err">format non lu —
+    photo, .pdf, .pptx, .docx, .txt ou .md</span></div>`;
+  $("attachments").appendChild(card);
 }
 
 /** Redimensionne avant stockage : une photo de 4 Mo dans un document JSON relu à
@@ -1248,20 +1842,33 @@ function shrink(file, max = 1400, quality = 0.82) {
 
 async function addAttachment(payload, preview) {
   const card = document.createElement("div"); card.className = "att";
-  card.innerHTML = `<div class="top"><b>${esc(payload.name)}</b><span class="tag">lecture…</span></div>`;
+  const wait = payload.kind === "pdf" ? "lecture du PDF…" : "lecture…";
+  card.innerHTML = `<div class="top"><b>${esc(payload.name)}</b><span class="tag">${wait}</span></div>`;
   $("attachments").appendChild(card);
   try {
     const r = await fetch(api("/attachment"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const res = await r.json(); if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
     const i = state.attachments.length;
-    state.attachments.push({ name: res.name, text: res.text, kind: res.kind });
-    card.innerHTML = `<div class="top"><b>${esc(res.name)}</b><span class="tag">a${i} · ${res.kind === "image" ? "photo lue" : "texte"} · ${res.costEuros ?? ""}</span>
+    state.attachments.push({ name: res.name, text: res.text, kind: res.kind, preview });
+    // La photo/PDF rejoint la séance partagée : le voisin qui n'avait pas de
+    // tableau récupère le tien.
+    let tag = `a${i} · ${({ image: "photo lue", pdf: "PDF lu", office: "diaporama lu" })[res.kind] ?? "texte"} · ${res.costEuros ?? ""}`;
+    try {
+      await contribute(res.kind === "image" ? "photo" : res.kind,
+        { name: res.name, kind: res.kind, text: res.text, preview });
+      tag += " · partagé";
+    } catch (e) { tag += ` · non partagé (${e.message})`; }
+    card.innerHTML = `<div class="top"><b>${esc(res.name)}</b><span class="tag">${tag}</span>
       <button class="sm ghost">✕</button></div>${preview ? `<img src="${preview}" alt="">` : ""}<pre>${esc(res.text.slice(0, 1200))}</pre>`;
     card.querySelector("button").onclick = () => { state.attachments[i] = null; card.remove(); refresh(); };
-    refresh(); markDirty();
+    refresh();
   } catch (e) { card.innerHTML = `<div class="top"><b>${esc(payload.name)}</b><span class="err">${esc(e.message)}</span></div>`; }
 }
 const live = () => state.attachments.filter(Boolean);
+// Ce qui part au modèle : le texte, jamais la miniature. Renvoyer l'image
+// gonflerait la requête de plusieurs mégaoctets sans rien ajouter — la photo a
+// déjà été lue.
+const sources = () => live().map(({ name, text, kind }) => ({ name, text, kind }));
 
 function refresh() {
   const has = state.segments.length > 0 || live().length > 0;
@@ -1278,15 +1885,27 @@ function refresh() {
 $("notesBtn").onclick = async () => {
   const b = $("notesBtn"); b.disabled = true; b.textContent = "génération…"; $("notesErr").textContent = "";
   try {
-    const keepEdited = (state.doc?.blocks ?? []).filter((x) => x.edited).map((x) => x.text ?? x.definition ?? "");
-    const r = await fetch(api("/notes"), { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ segments: state.segments, attachments: live(), keepEdited,
-                             enrich: $("enrichChk").checked, language: $("langSel").value }) });
-    const res = await r.json(); if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
-    res.blocks = [...(state.doc?.blocks ?? []).filter((x) => x.edited), ...res.blocks];
+    let res;
+    if (state.sessionKey) {
+      // Génération à partir de TOUT le pool de la séance — les audios de chacun
+      // et les documents de chacun — pas seulement ce que j'ai capté. Le
+      // document produit est le document commun.
+      const r = await fetch(api("/session-notes"), { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionKey: state.sessionKey, language: $("langSel").value }) });
+      const out = await r.json(); if (!r.ok) throw new Error(out.error ?? `HTTP ${r.status}`);
+      state.consensus = { ...(state.consensus ?? {}), stats: out.consensus ?? state.consensus?.stats };
+      res = out.doc;
+    } else {
+      const keepEdited = (state.doc?.blocks ?? []).filter((x) => x.edited).map((x) => x.text ?? x.definition ?? "");
+      const r = await fetch(api("/notes"), { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ segments: state.segments, attachments: sources(), keepEdited,
+                               enrich: $("enrichChk").checked, language: $("langSel").value }) });
+      res = await r.json(); if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
+      res.blocks = [...(state.doc?.blocks ?? []).filter((x) => x.edited), ...res.blocks];
+    }
     state.doc = res;
     if (!$("docTitle").value) $("docTitle").value = res.title;
-    renderSheet(); markDirty();
+    renderSheet();
   } catch (e) { $("notesErr").textContent = e.message; }
   finally { b.disabled = false; b.textContent = "Générer les notes"; refresh(); }
 };
@@ -1393,7 +2012,14 @@ function renderSheet() {
   (d.enrichments ?? []).forEach((e, i) => {
     if (!e.mermaid) return;
     const t = document.getElementById(`enr-${i}`); if (!t) return;
-    mermaid.render(`enr-m${i}-${Date.now()}`, e.mermaid).then(({ svg }) => (t.innerHTML = svg)).catch(() => t.remove());
+    // Un complément est un bonus : s'il ne se rend pas, on le retire sans
+    // bruit — mais on valide d'abord, pour ne pas laisser Mermaid dessiner son
+    // pavé d'erreur au milieu des notes.
+    mermaidError(e.mermaid).then((bad) => {
+      if (bad) { t.remove(); return; }
+      mermaid.render(`enr-m${i}-${Date.now()}`, e.mermaid)
+        .then(({ svg }) => (t.innerHTML = svg)).catch(() => t.remove());
+    });
   });
 }
 
@@ -1449,7 +2075,8 @@ function onEdit(el) {
 $("imgBtn").onclick = () => $("imgInput").click();
 $("imgInput").onchange = async (e) => {
   for (const f of e.target.files) {
-    const caption = prompt(`Légende pour « ${f.name} » (facultatif)`, "") ?? "";
+    const caption = (await askText("Légende de l'image", f.name,
+                                   { placeholder: "facultatif" })) ?? "";
     state.images.push({ dataUrl: await shrink(f), caption, name: f.name });
     renderImage(state.images.at(-1), state.images.length - 1);
   }
@@ -1471,14 +2098,15 @@ function renderImage(im, index) {
 
 // ------------------------------------------------------------ schémas
 $("diagBtn").onclick = async () => {
-  const instruction = prompt("Que représenter ? (vide = l'IA choisit)", "") ?? "";
+  const instruction = (await askText("Schéma", "Que représenter ? Laisse vide et l'IA choisit.",
+                                     { placeholder: "ex : le cycle d'instruction du CPU" })) ?? "";
   const b = $("diagBtn"); b.disabled = true; b.textContent = "schéma…";
   try {
     const context = state.doc
       ? [state.doc.summary, ...state.doc.blocks.map((x) => x.text ?? `${x.term} : ${x.definition}`)].join("\n")
       : state.segments.map((s) => s.text).join(" ");
     const r = await fetch(api("/diagram"), { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ context: context.slice(0, 12000), instruction, language: state.doc?.language ?? "fr" }) });
+      body: JSON.stringify({ context: context.slice(0, 12000), instruction, language: state.doc?.language ?? $("langSel").value }) });
     const res = await r.json(); if (!r.ok) throw new Error(res.error ?? `HTTP ${r.status}`);
     if (!res.mermaid?.trim()) { $("notesErr").textContent = res.explanation || "Ce passage ne se prête pas à un schéma."; return; }
     state.diagrams.push(res); renderDiagram(res, state.diagrams.length - 1); markDirty();
@@ -1500,13 +2128,32 @@ function renderDiagram(d, index) {
   again.onclick = () => { state.diagrams[index].mermaid = card.querySelector("textarea").value; draw(card, state.diagrams[index], index); markDirty(); };
   draw(card, d, index);
 }
-async function draw(card, d, index) {
+async function draw(card, d, index, retried = false) {
   const t = card.querySelector(".render");
-  try { const { svg } = await mermaid.render(`m${index}-${Date.now()}`, d.mermaid); t.innerHTML = svg; }
-  catch (e) {
-    t.innerHTML = `<div class="err">Mermaid n'a pas pu rendre ce schéma : ${esc(String(e.message ?? e).split("\n")[0])}</div>`;
-    card.querySelector("details").open = true;
+  const why = await mermaidError(d.mermaid);
+
+  // Un schéma invalide se répare tout seul, une fois. L'étudiant n'a pas à
+  // comprendre une erreur de grammaire Mermaid pour relire son cours.
+  if (why && !retried) {
+    t.innerHTML = `<div class="cap">schéma invalide — réparation…</div>`;
+    const fixed = await repairDiagram(d, why);
+    if (fixed) {
+      Object.assign(state.diagrams[index], fixed);
+      card.querySelector("h4").textContent = fixed.title ?? d.title;
+      card.querySelector("textarea").value = fixed.mermaid;
+      markDirty();
+      return draw(card, state.diagrams[index], index, true);
+    }
   }
+  if (why) {
+    t.innerHTML = `<div class="err">Ce schéma ne s'affiche pas — ${esc(why.slice(0, 120))}
+      <button class="sm fix" style="margin-left:8px">Réessayer</button></div>`;
+    card.querySelector("details").open = true;
+    t.querySelector(".fix").onclick = () => draw(card, state.diagrams[index], index);
+    return;
+  }
+  const { svg } = await mermaid.render(`m${index}-${Date.now()}`, d.mermaid);
+  t.innerHTML = svg;
 }
 
 // ------------------------------------------------------------- export
@@ -1588,7 +2235,8 @@ $("htmlBtn").onclick = async () => {
 <title>${esc(state.doc.title)}</title>
 <style>${katexCss}</style><style>${appFonts}</style><style>${appCss}</style>
 <style>body{padding:0;background:var(--paper)}main{padding:var(--s-lg)}
-#sheet{max-width:1100px;margin:0 auto}</style></head>
+:root{--col:${COLS.find((c) => c.key === $("colBtn").dataset.k)?.css ?? "78ch"}}
+#sheet{max-width:1680px;margin:0 auto}</style></head>
 <body><main>${sheet.outerHTML}</main>
 <p style="text-align:center;font-family:var(--font-data);font-size:11px;color:var(--neutral);padding:24px">
 Notes prises avec Amphi · ${new Date().toLocaleDateString("fr-FR", { dateStyle: "long" })}</p>
@@ -1626,7 +2274,9 @@ $("verBtn").onclick = async () => {
   back.onclick = (e) => { if (e.target === back) close(); };
   back.querySelector("#vX").onclick = close;
   for (const row of back.querySelectorAll(".vrow")) row.onclick = async () => {
-    if (!confirm("Restaurer cette version ? L'état actuel sera archivé, pas perdu.")) return;
+    if (!await ask("Restaurer cette version ?",
+                   "L'état actuel sera archivé, pas perdu — tu pourras revenir dessus.",
+                   "Restaurer")) return;
     await fetch(api("/restore"), { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: state.id, stamp: row.dataset.s }) });
     close(); openDoc(state.id);
@@ -1640,6 +2290,18 @@ $("saveBtn").onclick = save;
 async function save() {
   const title = $("docTitle").value.trim() || state.doc?.title || "Séance sans titre";
   if (state.doc) state.doc.title = title;
+  // Séance partagée : on ne réécrit JAMAIS le fichier entier — ce serait
+  // effacer les enregistrements des autres. On ne pousse que le document (les
+  // retouches manuelles), sous verrou serveur, sans toucher au reste.
+  if (state.sessionKey) {
+    try {
+      await fetch(api("/session-doc"), { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionKey: state.sessionKey, doc: state.doc }) });
+      state.dirty = false; $("saveBtn").disabled = true;
+      $("saveState").textContent = `enregistré à ${new Date().toLocaleTimeString("fr-FR")}`;
+    } catch { $("saveState").textContent = "échec de l'enregistrement"; }
+    return;
+  }
   const place = [$("docCourse").value, $("docChapter").value].filter((x) => x.trim()).map(slug).join("-");
   state.id ??= `${place ? place + "-" : ""}${slug(title)}-${Date.now().toString(36)}`;
   try {
@@ -1648,7 +2310,8 @@ async function save() {
                              images: state.images.filter(Boolean), attachments: live(),
                              // On garde l'emplacement de l'audio, jamais l'audio lui-même.
                              parts: state.parts.filter((p) => p.url?.startsWith("/audio/"))
-                               .map((p) => ({ seq: p.seq, startMs: p.startMs, endMs: p.endMs, url: p.url })),
+                               .map((p) => ({ seq: p.seq, startMs: p.startMs, endMs: p.endMs,
+                                              url: p.url, mime: p.mime, failed: !!p.failed })),
                              course: $("docCourse").value.trim(), chapter: $("docChapter").value.trim(),
                              segments: state.segments, savedAt: new Date().toISOString() }) });
     state.dirty = false; $("saveBtn").disabled = true;

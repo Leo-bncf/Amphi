@@ -1,0 +1,8 @@
+# Le serveur du studio tourne en bibliothèque standard. Ces deux paquets sont
+# facultatifs : sans eux il démarre et sert les notes, seule la fonction
+# correspondante renvoie une erreur explicite.
+pypdf>=5.0            # lecture des PDF déposés (Python pur, installable sur ARM)
+
+# Transcription locale — Apple Silicon uniquement, inutile sur le serveur.
+# mlx-whisper
+# imageio-ffmpeg

@@ -18,10 +18,12 @@ from __future__ import annotations
 
 import base64
 import binascii
+import html
 import hmac
+import io
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import os
 import re
 import sys
@@ -29,6 +31,11 @@ import time
 import unicodedata
 import urllib.error
 import urllib.request
+from urllib.parse import parse_qs, urlparse
+import threading
+
+import auth as identity_auth
+import zipfile
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -40,6 +47,16 @@ sys.path.insert(0, str(STUDIO_DIR.parent / "mac-worker"))
 # héberge l'app pour la promo — un Tinker Board, un Pi — rien de tout ça n'est
 # installable ni utile : elle sert des pages et appelle des API, la
 # transcription se fait ailleurs. L'import est donc facultatif.
+# pypdf est du Python pur : il s'installe partout, y compris sur la carte ARM,
+# sans compilation. Facultatif quand même — sans lui tout le reste fonctionne,
+# seul le dépôt d'un PDF le réclame.
+try:
+    from pypdf import PdfReader  # noqa: E402
+
+    PDF_AVAILABLE = True
+except ImportError:  # pragma: no cover - dépend de la machine
+    PDF_AVAILABLE = False
+
 try:
     from asr_server import (  # noqa: E402
         Handler as AsrHandler,
@@ -75,9 +92,9 @@ except ImportError as exc:  # pragma: no cover - dépend de la machine
 
         def do_GET(self) -> None:  # noqa: N802
             if self.path == "/health":
-                self._send(200, {"ok": True, "available": False, "warm": False,
-                                 "model": "aucun moteur local", "batteryPercent": None,
-                                 "reason": ASR_IMPORT_ERROR})
+                self._send(200, {"ok": True, "service": "amphi-studio", "available": False,
+                                 "warm": False, "model": "aucun moteur local", "batteryPercent": None,
+                                 "reason": ASR_IMPORT_ERROR, **health_diagnostics()})
                 return
             self._send(404, {"error": "not found"})
 
@@ -97,6 +114,13 @@ LOG = logging.getLogger("amphi.studio")
 # à qui la connaît, et on ne remarque rien tant que quelqu'un n'a pas effacé.
 AMPHI_PASSWORD = ""
 REALM = "Amphi"
+
+# Small, explicit wire contract for desktop clients. Keep this independent from
+# Whisper/model versions: the hosted server must be able to reject stale clients
+# before they start a recording or mutate a session.
+COMPATIBILITY_VERSION = 1
+SERVER_VERSION = os.environ.get("AMPHI_SERVER_VERSION", "0.1.0")
+MIN_CLIENT_COMPATIBILITY_VERSION = int(os.environ.get("AMPHI_MIN_CLIENT_COMPATIBILITY", "1"))
 
 MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
 MISTRAL_MODEL = os.environ.get("AMPHI_LLM_MODEL", "mistral-small-latest")
@@ -159,24 +183,35 @@ Dans les autres blocs, les symboles et expressions courtes s'écrivent entre $..
 « le paramètre $\\lambda$ contrôle la pénalité ». C'est ce qui rend les notes
 relisibles la veille d'un partiel."""
 
-VISION_PROMPT = """Tu lis une photo prise pendant un cours : tableau, diapositive projetée, ou page de notes.
+VISION_PROMPT = """Tu lis une photo prise pendant un cours : tableau, diapositive projetée,
+page d'un polycopié, ou notes manuscrites prises à la main.
 
 Restitue son contenu en markdown, fidèlement et sans rien inventer :
 - les formules mathématiques en LaTeX entre $...$ ou $$...$$ ;
 - les schémas et graphiques : décris-les en une ou deux phrases entre crochets, par exemple [Schéma : pipeline ETL, trois étapes reliées par des flèches] ;
 - ce qui est illisible : écris [illisible] plutôt que de deviner.
 
+Si ce sont des NOTES MANUSCRITES, restitue-les telles qu'elles sont écrites,
+abréviations et flèches comprises : c'est la trace de ce que l'étudiant a jugé
+important, elle vaut mieux qu'une reformulation propre. Garde la structure
+visuelle — ce qui est encadré ou souligné dans le cahier l'était pour une raison.
+
 Ne commente pas, ne résume pas, n'ajoute aucune explication : tu transcris."""
 
 DIAGRAM_PROMPT = """Tu produis un diagramme Mermaid à partir d'un passage de cours.
 
-Choisis le type qui convient au contenu : flowchart pour un processus ou un pipeline,
-sequenceDiagram pour des échanges, classDiagram pour une structure, erDiagram pour un
-modèle de données, gantt pour un planning. Ne force pas un flowchart sur ce qui n'en est pas un.
+DEUX TYPES AUTORISÉS, ET DEUX SEULEMENT : `flowchart` (processus, dépendances,
+classification, structure — c'est le cas général) et `sequenceDiagram` (échanges entre
+acteurs). N'utilise JAMAIS classDiagram, erDiagram, gantt, stateDiagram ni mindmap :
+leurs libellés ne peuvent pas être protégés par des guillemets, et la moindre
+ponctuation — un deux-points, une accolade, une parenthèse — casse le rendu chez
+l'étudiant. Une structure conceptuelle se représente très bien en flowchart, avec un
+nœud par notion et des flèches nommées.
 
 Contraintes de syntaxe, importantes car le rendu échoue sinon :
-- mets tout libellé contenant des espaces, accents ou ponctuation entre guillemets ;
-- pas de parenthèses ni de crochets nus dans les libellés ;
+- mets TOUT libellé entre guillemets doubles, sans exception : A["Bus de données"] ;
+- pas de guillemet double À L'INTÉRIEUR d'un libellé ;
+- pas de parenthèses ni de crochets nus hors des guillemets ;
 - **six à douze nœuds**, jamais plus : au-delà c'est une liste déguisée, pas un schéma ;
 - le `title` doit décrire ce que le schéma montre RÉELLEMENT. Si tu produis un
   enchaînement linéaire, ne l'intitule pas « choix entre A, B et C » — ce serait mentir
@@ -236,7 +271,34 @@ LANGUAGE_RULES = {
 }
 
 
-def resolve_language(requested: str, segments: list[dict[str, Any]]) -> tuple[str, str]:
+# Mots-outils : ils sont fréquents, courts, et propres à chaque langue. Le
+# vocabulaire technique, lui, voyage — un cours français dit « gradient
+# boosting ». C'est donc la grammaire qui trahit la langue, pas le sujet.
+LANG_STOPWORDS = {
+    "fr": {"le", "la", "les", "des", "une", "est", "que", "qui", "pour", "dans", "sur", "avec", "pas", "plus", "cette", "sont"},
+    "en": {"the", "and", "of", "to", "is", "that", "for", "with", "this", "are", "we", "can", "from", "which", "be", "it"},
+    "es": {"el", "la", "los", "las", "una", "que", "para", "con", "por", "del", "es", "son", "como", "más"},
+    "de": {"der", "die", "das", "und", "ist", "ein", "eine", "mit", "auf", "für", "nicht", "wir", "sind", "auch"},
+    "it": {"il", "la", "le", "che", "per", "con", "una", "sono", "del", "della", "come", "più", "questo"},
+}
+
+
+def guess_language_from_text(text: str) -> str | None:
+    """Langue d'un texte court, par vote de mots-outils. None si trop peu de signal."""
+    words = re.findall(r"[a-zà-öø-ÿ]+", (text or "").lower())
+    if len(words) < 25:
+        return None
+    votes = {code: sum(1 for w in words if w in stop) for code, stop in LANG_STOPWORDS.items()}
+    best = max(votes, key=votes.__getitem__)
+    # Un seul mot-outil reconnu sur cent, c'est du bruit, pas une langue.
+    return best if votes[best] >= max(3, len(words) // 40) else None
+
+
+def resolve_language(
+    requested: str,
+    segments: list[dict[str, Any]],
+    attachments: list[dict[str, Any]] | None = None,
+) -> tuple[str, str]:
     """
     Langue des notes : celle du cours, pas celle du développeur.
 
@@ -251,7 +313,14 @@ def resolve_language(requested: str, segments: list[dict[str, Any]]) -> tuple[st
             lang = (seg.get("lang") or "").lower()[:2]
             if lang:
                 votes[lang] = votes.get(lang, 0) + 1
-        code = max(votes, key=votes.__getitem__) if votes else "fr"
+        if votes:
+            code = max(votes, key=votes.__getitem__)
+        else:
+            # Séance sans enregistrement : la langue se lit dans les photos du
+            # tableau. Sans ça, un cours anglais photographié ressort en
+            # français — la faute exacte qu'on a déjà corrigée pour l'audio.
+            joined = " ".join(str(a.get("text") or "") for a in (attachments or []))
+            code = guess_language_from_text(joined) or "fr"
     rule = LANGUAGE_RULES.get(code)
     if rule is None:
         rule = f"Write the notes in the same language as the course (code: {code})."
@@ -516,28 +585,92 @@ def loads_lenient(raw: str) -> Any:
     raise ValueError("réponse du modèle illisible, même après récupération partielle")
 
 
+# Le compte est plafonné à 100 000 tokens et 100 requêtes par minute. Générer
+# les notes d'un cours d'une heure, c'est cinq ou six fenêtres tirées à la
+# suite : le plafond se touche pour de bon, et il se relâche tout seul.
+MISTRAL_RETRIES = 4
+
+
+def mistral_error_text(exc: urllib.error.HTTPError) -> str:
+    """Ce que Mistral a réellement répondu — pas notre supposition."""
+    raw = exc.read().decode("utf-8", "replace")[:400]
+    try:
+        detail = json.loads(raw)
+        message = detail.get("message") or (detail.get("error") or {}).get("message") or raw
+    except (ValueError, AttributeError):
+        message = raw
+    if exc.code == 429:
+        return (f"Mistral limite le débit (429 : {message}). Les reprises automatiques "
+                "n'ont pas suffi — laisse passer une minute et relance la génération.")
+    if exc.code in (401, 403):
+        return f"Mistral refuse la clé (HTTP {exc.code} : {message})."
+    return f"Mistral HTTP {exc.code} : {message}"
+
+
+def mistral_post(api_key: str, payload: dict[str, Any], *, timeout: int = 240) -> tuple[dict[str, Any], float]:
+    """
+    Appel à Mistral, avec reprise sur les erreurs passagères.
+
+    Deux familles d'erreurs passagères, traitées pareil. Le 429 : le débit par
+    minute qu'on vient de dépasser, qui se relâche tout seul. La coupure
+    réseau : un wifi qui bascule, un résolveur DNS qui ne répond pas une
+    seconde. Aucune des deux ne justifie de perdre les fenêtres déjà générées
+    d'un cours d'une heure.
+    """
+    body = json.dumps(payload).encode("utf-8")
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    started = time.perf_counter()
+    delay = 5.0
+    for attempt in range(1, MISTRAL_RETRIES + 1):
+        request = urllib.request.Request(MISTRAL_URL, data=body, headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return json.loads(response.read()), (time.perf_counter() - started) * 1000
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (429, 500, 502, 503, 504) or attempt == MISTRAL_RETRIES:
+                raise
+            # Mistral dit parfois lui-même combien de temps attendre ; sinon on
+            # double à chaque fois, plafonné pour ne pas bloquer l'interface.
+            header = exc.headers.get("Retry-After") if exc.headers else None
+            try:
+                wait = float(header) if header else delay
+            except ValueError:
+                wait = delay
+            wait = min(max(wait, 1.0), 30.0)
+            LOG.warning("Mistral %d — reprise dans %.0f s (tentative %d/%d)",
+                        exc.code, wait, attempt, MISTRAL_RETRIES)
+            time.sleep(wait)
+            delay = min(delay * 2, 30.0)
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            # DNS muet, wifi qui bascule, machine qui sort de veille : ça se
+            # rétablit en quelques secondes. Le message brut — « nodename nor
+            # servname provided » — n'apprend rien à un étudiant.
+            if attempt == MISTRAL_RETRIES:
+                raise ConnectionError(
+                    "Pas de connexion à Mistral (réseau ou DNS). Vérifie le wifi, "
+                    "puis relance la génération — rien n'est perdu."
+                ) from exc
+            LOG.warning("réseau indisponible (%s) — reprise dans %.0f s (tentative %d/%d)",
+                        type(exc).__name__, delay, attempt, MISTRAL_RETRIES)
+            time.sleep(delay)
+            delay = min(delay * 2, 30.0)
+    raise RuntimeError("boucle de reprise sortie sans résultat")
+
+
 def mistral_chat(
     api_key: str, messages: list[dict[str, Any]], *, model: str | None = None, max_tokens: int = 6000
 ) -> tuple[dict[str, Any], dict[str, int], float]:
     """Appel générique. `messages` peut contenir du texte et des images."""
-    body = json.dumps(
+    payload, latency_ms = mistral_post(
+        api_key,
         {
             "model": model or MISTRAL_MODEL,
             "messages": messages,
             "response_format": {"type": "json_object"},
             "temperature": 0.2,
             "max_tokens": max_tokens,
-        }
-    ).encode("utf-8")
-    request = urllib.request.Request(
-        MISTRAL_URL,
-        data=body,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        },
     )
-    started = time.perf_counter()
-    with urllib.request.urlopen(request, timeout=240) as response:
-        payload = json.loads(response.read())
-    latency_ms = (time.perf_counter() - started) * 1000
     choice = payload["choices"][0]
     content = choice["message"]["content"]
     if choice.get("finish_reason") == "length":
@@ -545,9 +678,39 @@ def mistral_chat(
     return loads_lenient(content), payload.get("usage", {}), latency_ms
 
 
+# Mermaid vit dans le navigateur : on ne peut pas l'exécuter ici. On attrape donc
+# les fautes dont on a la preuve qu'elles cassent le rendu, sans rien deviner.
+# Les deux schémas cassés observés étaient des classDiagram : « +Data bus:
+# Transfers data » et « +increasingSequence(A_n) A_n ⊆ A_{n+1} ». Le deux-points
+# et l'accolade y sont de la grammaire, pas du texte, et aucun guillemet ne peut
+# les protéger.
+MERMAID_ALLOWED = ("flowchart", "graph", "sequenceDiagram")
+
+
+def mermaid_problems(code: str) -> list[str]:
+    """Fautes certaines dans un diagramme. Vide = rien de détectable ici."""
+    lines = [line for line in (code or "").strip().split("\n") if line.strip()]
+    if not lines:
+        return ["diagramme vide"]
+    kind = lines[0].strip().split()[0] if lines[0].strip().split() else ""
+    problems = []
+    if kind not in MERMAID_ALLOWED:
+        problems.append(
+            f"type « {kind} » interdit : réécris le même contenu en flowchart, "
+            "un nœud par notion, libellés entre guillemets"
+        )
+    for n, line in enumerate(lines, 1):
+        if line.count('"') % 2:
+            problems.append(f"ligne {n} : guillemet non fermé")
+        if line.count("[") != line.count("]"):
+            problems.append(f"ligne {n} : crochets non appariés")
+    return problems
+
+
 def mistral_vision_text(api_key: str, data_url: str) -> tuple[str, dict[str, int], float]:
     """Photo du tableau ou de diapositive → markdown. Sortie libre, pas de JSON."""
-    body = json.dumps(
+    payload, latency_ms = mistral_post(
+        api_key,
         {
             "model": MISTRAL_MODEL,
             "messages": [
@@ -561,44 +724,66 @@ def mistral_vision_text(api_key: str, data_url: str) -> tuple[str, dict[str, int
             ],
             "temperature": 0.1,
             "max_tokens": 3000,
-        }
-    ).encode("utf-8")
-    request = urllib.request.Request(
-        MISTRAL_URL,
-        data=body,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        },
     )
-    started = time.perf_counter()
-    with urllib.request.urlopen(request, timeout=240) as response:
-        payload = json.loads(response.read())
-    latency_ms = (time.perf_counter() - started) * 1000
-    return (
-        payload["choices"][0]["message"]["content"].strip(),
-        payload.get("usage", {}),
-        latency_ms,
-    )
+    # Le modèle enveloppe volontiers sa réponse dans ```markdown … ```. La
+    # clôture reste ensuite au milieu des sources citées par les notes.
+    text = payload["choices"][0]["message"]["content"].strip()
+    fence = re.match(r"^```[a-zA-Z]*\n(.*?)\n?```$", text, re.DOTALL)
+    if fence:
+        text = fence.group(1).strip()
+    return (text, payload.get("usage", {}), latency_ms)
 
 
 # Au-delà, un seul appel ne tient plus : le JSON est coupé au milieu et tout
 # l'appel est perdu. Un cours d'une heure fait couramment 600 segments.
-WINDOW_SEGMENTS = 130
+#
+# La taille ne vient pas d'une limite technique — le modèle n'utilise que 870
+# de ses 8000 tokens de sortie sur une fenêtre de 130 — mais de son attention :
+# plus la fenêtre est large, plus il résume au lieu de couvrir. Mesuré sur un
+# vrai cours de 46 min (306 segments de parole) :
+#   130 segments → 56 blocs, 28 % de la parole couverte, 0,0030 €
+#    70 segments → 73 blocs, 32 %, 0,0036 €
+#    45 segments → 88 blocs, 34 %, 0,0051 €
+# 70 prend l'essentiel du gain en deux fois moins d'appels que 45 — ce qui
+# compte, car chaque appel supplémentaire rapproche de la limite par minute.
+WINDOW_SEGMENTS = 70
 WINDOW_OVERLAP = 4
+# Signes de documents joints à chaque fenêtre, toutes pièces confondues.
+WINDOW_DOC_BUDGET = 9000
 
 WINDOW_PROMPT = """Tu produis les notes d'une PARTIE d'un cours — pas du cours entier.
 
 {LANGUAGE_RULE}
 
-Mêmes règles que d'habitude : chaque bloc cite ses sources dans `sourceSegmentIds`,
-rien d'inventé, pas de section creuse, pas de bloc tiré d'une phrase administrative.
+Mêmes règles que d'habitude : chaque bloc cite ses sources — `sourceSegmentIds` pour
+la transcription [s12], `sourceAttachmentIds` pour les DOCUMENTS [a0] fournis plus bas
+(photos du tableau, diapositives, polycopiés). Ces documents valent pour tout le cours,
+pas seulement pour cette partie : sers-t'en dès qu'ils éclairent ce qui est dit ici, et
+cite les deux quand une photo confirme l'oral. Rien d'inventé, pas de section creuse,
+pas de bloc tiré d'une phrase administrative.
 Les formules dictées deviennent des blocs "formula" en LaTeX ; les symboles dans le
 texte s'écrivent entre $...$.
 
+COUVERTURE — la faute la plus coûteuse est l'oubli, pas la longueur.
+Ces notes REMPLACENT le cours : l'étudiant n'a pas l'enregistrement sous la main, il
+n'a que toi. Chaque idée que l'enseignant développe — un mécanisme expliqué, un
+exemple détaillé, une distinction posée, un chiffre donné, une consigne d'examen —
+doit se retrouver dans un bloc. Tu n'as pas à choisir les trois plus importantes :
+prends-les toutes. Un passage de cours développé qui ne laisse aucune trace est une
+erreur au même titre qu'une invention.
+
 STRUCTURE — c'est ce qui distingue des notes d'une transcription reformatée.
 Ouvre par un titre de section (heading, level 2) qui nomme ce dont il est question,
-et découpe la partie en une à trois sections. Dès qu'une idée se décline, utilise des
-puces plutôt qu'un paragraphe : trois points en liste se relisent, un paragraphe de
-huit lignes ne se relit pas. Un terme technique introduit devient une "definition".
-Un enchaînement de paragraphes sans titre ni liste est un échec.
+et découpe la partie en autant de sections qu'il y a de sujets réellement traités.
+Dès qu'une idée se décline, utilise des puces plutôt qu'un paragraphe : trois points
+en liste se relisent, un paragraphe de huit lignes ne se relit pas. Un terme technique
+introduit devient une "definition". Un enchaînement de paragraphes sans titre ni liste
+est un échec.
+
+Cette exigence de couverture ne contredit pas l'interdiction des sections creuses :
+on ne crée pas de section pour un titre annoncé sans suite, mais tout ce qui EST
+développé doit apparaître.
 
 Tu ne produis NI titre général, NI résumé, NI glossaire — quelqu'un d'autre s'en charge
 sur l'ensemble. Uniquement les blocs de cette partie, dans l'ordre où les choses sont dites.
@@ -711,6 +896,32 @@ def coerce_block(raw: Any) -> dict[str, Any] | None:
     return block
 
 
+def locate_in_attachments(
+    block: dict[str, Any], attachments: list[dict[str, Any]], top: int = 2
+) -> list[str]:
+    """
+    Même recherche que dans la transcription, mais du côté des documents.
+
+    Un bloc tiré d'une photo du tableau n'a aucun recouvrement avec la parole du
+    moment : sans cette piste il partait sans source et se faisait écarter, ce
+    qui revenait à jeter ce que la photo apportait.
+    """
+    produced = content_words(block_text_of(block))
+    if not produced:
+        return []
+    scored = []
+    for i, attachment in enumerate(attachments):
+        if not isinstance(attachment, dict):
+            continue
+        overlap = len(produced & content_words(str(attachment.get("text") or "")))
+        # Deux mots pleins partagés suffisent à proposer la piste : c'est
+        # verify_anchor qui tranche ensuite. Un seul mot serait du hasard.
+        if overlap >= 2:
+            scored.append((overlap, i))
+    scored.sort(reverse=True)
+    return [f"a{i}" for _, i in scored[:top]]
+
+
 def locate_in_window(
     block: dict[str, Any], segments: list[dict[str, Any]], lo: int, hi: int, top: int = 3
 ) -> list[str]:
@@ -740,9 +951,53 @@ def locate_in_window(
     return [f"s{i}" for i in sorted(best)]
 
 
+def speech_indices(segments: list[dict[str, Any]]) -> list[int]:
+    """
+    Indices GLOBAUX des segments qui portent réellement de la parole.
+
+    Deux sortes de déchet, qui demandent deux critères différents.
+
+    Le bruit de fond décodé comme de la parole s'attrape à la confiance. Mais
+    Whisper produit aussi, sur les silences, des ritournelles qu'il affirme avec
+    aplomb : sur un vrai cours, « Thank you. » revient 39 fois, une occurrence à
+    0,89 de confiance. Aucun seuil ne l'écarte — c'est la répétition qui le
+    trahit, pas l'incertitude.
+
+    Mesuré sur un cours d'informatique d'une heure : 154 segments sur 561 sont
+    des artefacts, soit 27 % des segments pour 6 % des mots. Exactement le
+    profil du vide.
+    """
+    counts: dict[str, int] = {}
+    normalised: list[str] = []
+    for seg in segments:
+        text = re.sub(r"[^a-z0-9 ]", "", str(seg.get("text") or "").lower()).strip()
+        normalised.append(text)
+        counts[text] = counts.get(text, 0) + 1
+
+    kept = []
+    for i, seg in enumerate(segments):
+        text = normalised[i]
+        words = text.split()
+        if not words:
+            continue
+        # Trois mots ou moins, répétés quatre fois ou plus dans la séance :
+        # c'est une ritournelle de silence, pas un enseignant qui insiste.
+        if len(words) <= 3 and counts[text] >= 4:
+            continue
+        # Les anciens documents et certaines contributions importées n'ont pas
+        # de score de confiance. « Inconnu » n'est pas « inaudible » : les jeter
+        # ferait disparaître tout leur audio des notes partagées. On n'applique
+        # le seuil que lorsque Whisper a effectivement fourni un score.
+        confidence = seg.get("avgConfidence")
+        if confidence is not None and float(confidence) < MIN_SEGMENT_CONFIDENCE:
+            continue
+        kept.append(i)
+    return kept
+
+
 def generate_windowed(
     api_key: str, segments: list[dict[str, Any]], attachments: list[dict[str, Any]],
-    language_rule: str,
+    language_rule: str, indices: list[int] | None = None,
 ) -> tuple[dict[str, Any], dict[str, int], float]:
     """
     Génère les notes d'un long cours en plusieurs passes.
@@ -756,32 +1011,49 @@ def generate_windowed(
     started = time.perf_counter()
     usage = {"prompt_tokens": 0, "completion_tokens": 0}
     blocks: list[dict[str, Any]] = []
+    failures: list[Exception] = []
 
+    # Les documents accompagnent CHAQUE fenêtre, pas seulement la première.
+    # Une photo du tableau prise à la cinquantième minute doit être visible de
+    # la fenêtre qui couvre la cinquantième minute — sinon elle ne sert à rien,
+    # et le bloc qui la cite est rejeté faute d'ancre vérifiable.
     context = ""
     if attachments:
-        context = "\n\nDOCUMENTS FOURNIS\n" + "\n\n".join(
-            f"[a{i}] {a['name']}\n{a['text'][:2500]}" for i, a in enumerate(attachments)
+        # Un PDF de polycopié fait plusieurs dizaines de milliers de signes :
+        # répété à l'identique dans six fenêtres, il coûterait plus cher que le
+        # cours lui-même. On partage donc un budget entre les documents.
+        budget = max(1200, WINDOW_DOC_BUDGET // max(1, len(attachments)))
+        context = "\n\nDOCUMENTS FOURNIS — photos du tableau, diapositives, polycopiés\n" + "\n\n".join(
+            f"[a{i}] {a['name']}\n{a['text'][:budget]}" for i, a in enumerate(attachments)
         )
 
-    starts = range(0, len(segments), WINDOW_SEGMENTS - WINDOW_OVERLAP)
-    windows = [(i, min(i + WINDOW_SEGMENTS, len(segments))) for i in starts]
+    # Le filtre de bruit ne s'appliquait qu'aux cours courts : les fenêtres se
+    # construisaient sur les segments bruts. Un cours d'une heure — le seul cas
+    # qui passe par ici — recevait donc le bruit en entier, et les fenêtres se
+    # remplissaient de « Thank you. » au lieu du cours.
+    usable = speech_indices(segments) if indices is None else indices
+    starts = range(0, len(usable), WINDOW_SEGMENTS - WINDOW_OVERLAP)
+    windows = [(i, min(i + WINDOW_SEGMENTS, len(usable))) for i in starts]
     windows = [w for w in windows if w[1] > w[0]]
-    LOG.info("cours long : %d segments → %d fenêtres", len(segments), len(windows))
+    LOG.info("cours long : %d segments dont %d de parole → %d fenêtres",
+             len(segments), len(usable), len(windows))
 
     for n, (lo, hi) in enumerate(windows, 1):
-        body = "\n".join(f"[s{i}] {segments[i]['text']}" for i in range(lo, hi))
+        # lo/hi indexent la liste de parole ; les identifiants restent globaux.
+        body = "\n".join(f"[s{usable[k]}] {segments[usable[k]]['text']}" for k in range(lo, hi))
         header = f"PARTIE {n} SUR {len(windows)} DU COURS\n"
         try:
             doc, u, _ = mistral_chat(
                 api_key,
                 [
                     {"role": "system", "content": WINDOW_PROMPT.replace("{LANGUAGE_RULE}", language_rule)},
-                    {"role": "user", "content": header + body + (context if n == 1 else "")},
+                    {"role": "user", "content": header + body + context},
                 ],
                 max_tokens=8000,
             )
-        except Exception:  # noqa: BLE001 — une fenêtre ratée ne doit pas perdre les autres
+        except Exception as exc:  # noqa: BLE001 — une fenêtre ratée ne doit pas perdre les autres
             LOG.exception("fenêtre %d/%d", n, len(windows))
+            failures.append(exc)
             continue
         for key in usage:
             usage[key] += u.get(key, 0)
@@ -792,9 +1064,15 @@ def generate_windowed(
                 if fixed is None:
                     continue
                 if not fixed.get("sourceSegmentIds"):
-                    found = locate_in_window(fixed, segments, lo, hi)
+                    found = locate_in_window(fixed, segments, usable[lo], usable[hi - 1] + 1)
                     if found:
                         fixed["sourceSegmentIds"] = found
+                # Ni segment ni document cité : le bloc vient peut-être d'une
+                # photo. On cherche avant de l'abandonner.
+                if not fixed.get("sourceSegmentIds") and not fixed.get("sourceAttachmentIds"):
+                    found = locate_in_attachments(fixed, attachments)
+                    if found:
+                        fixed["sourceAttachmentIds"] = found
                 blocks.append(fixed)
 
     # En-tête et glossaire à partir des blocs, pas de la transcription entière.
@@ -805,6 +1083,11 @@ def generate_windowed(
         ) if line.strip(" -")
     )[:14000]
     head: dict[str, Any] = {}
+    # Toutes les fenêtres tombées : c'est une panne, pas un cours sans contenu.
+    # Rendre un document vide sans rien dire laissait l'étudiant devant une page
+    # blanche en croyant que ses notes étaient impossibles à écrire.
+    if failures and len(failures) == len(windows):
+        raise failures[-1]
     if not outline.strip():
         # Sans plan, l'appel de synthèse invente un sujet. Mieux vaut pas de titre.
         LOG.warning("aucun bloc exploitable : pas d'en-tête généré")
@@ -869,7 +1152,8 @@ def generate_enrichments(
 
 
 def call_mistral(api_key: str, transcript: str) -> tuple[dict[str, Any], dict[str, int], float]:
-    body = json.dumps(
+    payload, latency_ms = mistral_post(
+        api_key,
         {
             "model": MISTRAL_MODEL,
             "messages": [
@@ -879,19 +1163,9 @@ def call_mistral(api_key: str, transcript: str) -> tuple[dict[str, Any], dict[st
             "response_format": {"type": "json_object"},
             "temperature": 0.2,
             "max_tokens": 6000,
-        }
-    ).encode("utf-8")
-
-    request = urllib.request.Request(
-        MISTRAL_URL,
-        data=body,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        },
+        timeout=180,
     )
-    started = time.perf_counter()
-    with urllib.request.urlopen(request, timeout=180) as response:
-        payload = json.loads(response.read())
-    latency_ms = (time.perf_counter() - started) * 1000
-
     content = payload["choices"][0]["message"]["content"]
     usage = payload.get("usage", {})
     return json.loads(content), usage, latency_ms
@@ -928,6 +1202,121 @@ def snapshot(doc_id: str, payload: dict[str, Any]) -> None:
     (folder / f"{stamp}.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     for old in sorted(folder.glob("*.json"), reverse=True)[KEEP_VERSIONS:]:
         old.unlink(missing_ok=True)
+
+
+sys.path.insert(0, str(STUDIO_DIR))
+import sessions as S  # noqa: E402
+
+SCHEDULE_FILE = DATA_DIR / "schedule.json"
+
+
+def user_schedule_path(user_id: str) -> Path:
+    """Private schedule storage; never derive a filename from user input."""
+    return DATA_DIR / f"schedule-user-{safe_id(user_id)}.json"
+
+
+def load_user_schedule(user_id: str) -> dict[str, dict[str, Any]]:
+    path = user_schedule_path(user_id)
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text("utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except (ValueError, OSError):
+        return {}
+
+# Le serveur est multi-thread : deux étudiants peuvent contribuer à la même
+# séance au même instant. Un verrou par clé sérialise le lire-modifier-écrire de
+# CETTE séance, sans bloquer les autres. Le petit verrou protège le dictionnaire
+# de verrous lui-même.
+_SESSION_LOCKS: dict[str, threading.Lock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def session_lock(key: str) -> threading.Lock:
+    with _LOCKS_GUARD:
+        lock = _SESSION_LOCKS.get(key)
+        if lock is None:
+            lock = _SESSION_LOCKS[key] = threading.Lock()
+        return lock
+
+
+def session_path(key: str) -> Path:
+    return DATA_DIR / f"{safe_id(key)}.json"
+
+
+def load_session(key: str) -> dict[str, Any]:
+    path = session_path(key)
+    if path.exists():
+        try:
+            return json.loads(path.read_text("utf-8"))
+        except (ValueError, OSError):
+            LOG.warning("séance illisible, réinitialisée : %s", key)
+    return S.blank_session(key)
+
+
+def store_session(key: str, session: dict[str, Any]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    path = session_path(key)
+    if path.exists():
+        try:
+            snapshot(safe_id(key), json.loads(path.read_text("utf-8")))
+        except (ValueError, OSError):
+            pass
+    session["savedAt"] = datetime.now(timezone.utc).isoformat()
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(session, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+    _INDEX_CACHE.pop(str(path), None)
+
+
+def load_schedule() -> dict[str, dict[str, Any]]:
+    if SCHEDULE_FILE.exists():
+        try:
+            return json.loads(SCHEDULE_FILE.read_text("utf-8"))
+        except (ValueError, OSError):
+            return {}
+    return {}
+
+
+def health_diagnostics() -> dict[str, Any]:
+    """Return operational facts safe for an unauthenticated liveness probe.
+
+    Deliberately excludes environment values, paths containing user names, and
+    all session content. Queue state is client-side (Tauri) in this deployment.
+    """
+    now = time.time()
+    try:
+        usage = os.statvfs(DATA_DIR if DATA_DIR.exists() else DATA_DIR.parent)
+        storage = {
+            "ok": usage.f_bavail > 0,
+            "freeBytes": usage.f_bavail * usage.f_frsize,
+            "totalBytes": usage.f_blocks * usage.f_frsize,
+        }
+    except OSError:
+        storage = {"ok": False, "freeBytes": None, "totalBytes": None}
+    json_files = list(DATA_DIR.glob("*.json")) if DATA_DIR.exists() else []
+    session_files = [p for p in json_files if p.name != "schedule.json"]
+    audio_files = [p for p in AUDIO_DIR.rglob("*") if p.is_file()] if AUDIO_DIR.exists() else []
+    backup_root = Path(os.environ.get("AMPHI_BACKUP_DIR") or (Path.home() / "Backups" / "amphi"))
+    try:
+        backups = sorted((p for p in backup_root.iterdir() if p.is_dir()),
+                         key=lambda p: p.stat().st_mtime, reverse=True) if backup_root.exists() else []
+    except OSError:
+        backups = []
+    latest_backup = backups[0] if backups else None
+    backup_age = round(max(0.0, now - latest_backup.stat().st_mtime), 1) if latest_backup else None
+    backup_ok = bool(latest_backup and (latest_backup / "manifest.json").is_file())
+    return {
+        "storage": {**storage, "dataFiles": len(json_files), "sessionFiles": len(session_files),
+                    "audioFiles": len(audio_files)},
+        "queue": {"state": "client-side", "pending": None, "diagnostic": "not observable by server"},
+        "collaboration": {"activeLocks": sum(1 for lock in _SESSION_LOCKS.values() if lock.locked()),
+                          "knownSessions": len(session_files), "lockRegistry": len(_SESSION_LOCKS)},
+        "algorithm": {"consensusVersion": S.CONSENSUS_VERSION},
+        "backup": {"latestAgeSeconds": backup_age, "available": bool(latest_backup),
+                    "valid": backup_ok, "count": len(backups)},
+    }
 
 
 def purge_old_audio() -> int:
@@ -989,19 +1378,118 @@ def lexicon_for_course(course: str, limit: int = 60) -> list[str]:
     return terms[:limit]
 
 
+# Chaque séance porte ses photos et sa transcription : le fichier pèse vite
+# quelques mégaoctets, et la bibliothèque les relisait tous à chaque ouverture.
+# La clé est (mtime, taille) — une séance modifiée est relue, les autres non.
+_INDEX_CACHE: dict[str, tuple[float, int, dict[str, Any]]] = {}
+
+
+def list_sessions(on: str = "", course: str = "") -> list[dict[str, Any]]:
+    """
+    Séances existantes, pour l'écran « rejoindre ». On lit les fichiers qui ont
+    une clé de séance, on résume, et on filtre éventuellement par jour ou cours.
+    """
+    if not DATA_DIR.exists():
+        return []
+    out = []
+    for path in sorted(DATA_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        if path.name == "schedule.json":
+            continue
+        try:
+            payload = json.loads(path.read_text("utf-8"))
+        except (ValueError, OSError):
+            continue
+        if "sessionKey" not in payload:
+            continue  # ancien document mono-utilisateur, pas une séance partagée
+        summary = S.session_summary(payload)
+        if on and not str(summary.get("start") or "").startswith(on):
+            continue
+        if course and S.slugify(course) not in S.slugify(summary.get("course") or ""):
+            continue
+        out.append(summary)
+    return out
+
+
+def schedule_now_from_book(book: dict[str, dict[str, Any]], at_iso: str = "") -> list[dict[str, Any]]:
+    """Cours d'un carnet en cours ou imminents autour de l'instant donné."""
+    if not book:
+        return []
+    now = datetime.now(timezone.utc)
+    if at_iso:
+        try:
+            now = datetime.fromisoformat(at_iso.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+    hits = []
+    for ev in book.values():
+        try:
+            start = datetime.fromisoformat(str(ev["start"]).replace("Z", "+00:00"))
+        except (ValueError, KeyError, TypeError):
+            continue
+        end = None
+        if ev.get("end"):
+            try:
+                end = datetime.fromisoformat(str(ev["end"]).replace("Z", "+00:00"))
+            except ValueError:
+                end = None
+        end = end or (start + timedelta(hours=2))
+        # « en ce moment » avec une marge : on veut proposer le cours quinze
+        # minutes avant qu'il commence et un peu après sa fin.
+        if start - timedelta(minutes=15) <= now <= end + timedelta(minutes=30):
+            hits.append({**ev, "state": "now"})
+    hits.sort(key=lambda e: e["start"])
+    return hits
+
+
+def schedule_now(at_iso: str = "") -> list[dict[str, Any]]:
+    return schedule_now_from_book(load_schedule(), at_iso)
+
+
 def list_documents() -> list[dict[str, Any]]:
-    """Index de la bibliothèque : on lit l'en-tête de chaque fichier, pas tout le corps."""
+    """Index de la bibliothèque : un fichier inchangé n'est pas relu."""
     if not DATA_DIR.exists():
         return []
     docs = []
+    seen: set[str] = set()
     for path in sorted(DATA_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        if path.name == "schedule.json":
+            continue
+        key = str(path)
+        seen.add(key)
+        try:
+            info = path.stat()
+        except OSError:
+            continue
+        cached = _INDEX_CACHE.get(key)
+        if cached and cached[0] == info.st_mtime and cached[1] == info.st_size:
+            docs.append(cached[2])
+            continue
         try:
             payload = json.loads(path.read_text("utf-8"))
         except (ValueError, OSError):
             continue
         doc = payload.get("doc") or {}
-        docs.append(
-            {
+        if payload.get("sessionKey"):
+            # Séance partagée : le titre vient de l'agenda, la durée du plus long
+            # enregistrement, et on expose qui a contribué.
+            sched = payload.get("schedule") or {}
+            recs = payload.get("recordings") or []
+            entry = {
+                "id": path.stem,
+                "sessionKey": payload["sessionKey"],
+                "title": doc.get("title") or sched.get("course") or sched.get("title") or path.stem,
+                "savedAt": payload.get("savedAt"),
+                "blocks": len(doc.get("blocks") or []),
+                "diagrams": 0,
+                "attachments": len(payload.get("attachments") or []),
+                "durationMs": max((r.get("endMs") or 0) for r in recs) if recs else 0,
+                "course": (sched.get("course") or "").strip(),
+                "chapter": "",
+                "contributors": payload.get("contributors") or [],
+                "recordingCount": len(recs),
+            }
+        else:
+            entry = {
                 "id": path.stem,
                 "title": doc.get("title") or payload.get("title") or path.stem,
                 "savedAt": payload.get("savedAt"),
@@ -1012,8 +1500,173 @@ def list_documents() -> list[dict[str, Any]]:
                 "course": (payload.get("course") or "").strip(),
                 "chapter": (payload.get("chapter") or "").strip(),
             }
-        )
+        _INDEX_CACHE[key] = (info.st_mtime, info.st_size, entry)
+        docs.append(entry)
+    # Une séance supprimée ne doit pas rester en mémoire jusqu'au redémarrage.
+    for stale in set(_INDEX_CACHE) - seen:
+        _INDEX_CACHE.pop(stale, None)
     return docs
+
+
+# Un scan de 200 pages passé à la vision coûterait des euros et des minutes
+# sans prévenir. Au-delà, on refuse et on dit pourquoi.
+PDF_VISION_PAGES = 12
+# En dessous, la page n'a pas livré de texte : c'est une image, un schéma, ou
+# un scan. Un en-tête et un numéro de page font déjà une quarantaine de signes.
+PDF_MIN_CHARS = 60
+
+
+def decode_data_url(raw: Any) -> bytes:
+    """Octets d'un fichier arrivé en data: URL."""
+    text = str(raw or "")
+    if "," not in text:
+        raise ValueError("fichier illisible : data URL attendue")
+    try:
+        return base64.b64decode(text.split(",", 1)[1])
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("fichier illisible : base64 invalide") from exc
+
+
+def format_cost(millicents: float) -> str:
+    """Coût affiché à l'étudiant, dans la convention française."""
+    return f"{millicents / 1000:.4f} €".replace(".", ",")
+
+
+def pdf_page_image(page: Any) -> str | None:
+    """Plus grande image intégrée d'une page — celle du scan, pas le logo."""
+    try:
+        images = list(page.images)
+    except Exception:  # noqa: BLE001 — un PDF exotique ne doit pas tout arrêter
+        return None
+    best = None
+    for image in images:
+        try:
+            blob = image.data
+        except Exception:  # noqa: BLE001
+            continue
+        if blob and (best is None or len(blob) > len(best[1])):
+            best = (image.name or "", blob)
+    if best is None or len(best[1]) < 8000:
+        return None
+    kind = "png" if best[1][:4] == b"\x89PNG" else "jpeg"
+    return f"data:image/{kind};base64," + base64.b64encode(best[1]).decode()
+
+
+def text_from_pdf(blob: bytes, name: str, api_key: str = "") -> tuple[str, float]:
+    """
+    Texte d'un PDF, page par page. Retourne (texte, coût en millicents).
+
+    Deux sortes de PDF arrivent d'un cours : celui exporté depuis LaTeX ou
+    PowerPoint, dont le texte se lit directement et gratuitement ; et le scan,
+    qui n'est qu'une suite d'images. Le second passe par la lecture visuelle,
+    la même que pour une photo de tableau — sinon un polycopié scanné donnerait
+    un document vide sans que personne comprenne pourquoi.
+    """
+    if not PDF_AVAILABLE:
+        raise ValueError("la lecture des PDF demande pypdf : python -m pip install pypdf")
+    try:
+        reader = PdfReader(io.BytesIO(blob))
+        if reader.is_encrypted:
+            # Un PDF « protégé » sans mot de passe reste courant ; on tente.
+            reader.decrypt("")
+        pages = list(reader.pages)
+    except Exception as exc:  # noqa: BLE001 — pypdf lève une famille d'erreurs
+        raise ValueError(f"{name} : PDF illisible ({type(exc).__name__})") from exc
+    if not pages:
+        raise ValueError(f"{name} ne contient aucune page")
+
+    chunks: list[tuple[int, str]] = []
+    scanned: list[int] = []
+    for number, page in enumerate(pages, start=1):
+        try:
+            text = (page.extract_text() or "").strip()
+        except Exception:  # noqa: BLE001
+            text = ""
+        if len(text) >= PDF_MIN_CHARS:
+            chunks.append((number, text))
+        else:
+            scanned.append(number)
+
+    cost = 0.0
+    if scanned and not chunks:
+        # Document entièrement scanné : c'est le cas qui justifie la lecture
+        # visuelle. S'il ne reste qu'une page vide au milieu d'un texte, on
+        # l'ignore — ce n'est pas la peine de payer pour un intercalaire.
+        if api_key == "":
+            raise ValueError(
+                f"{name} est un PDF scanné (aucun texte) et MISTRAL_API_KEY est absente."
+            )
+        if len(scanned) > PDF_VISION_PAGES:
+            raise ValueError(
+                f"{name} est un scan de {len(scanned)} pages : au-delà de "
+                f"{PDF_VISION_PAGES}, découpe-le ou photographie les pages utiles."
+            )
+        for number in scanned:
+            data_url = pdf_page_image(pages[number - 1])
+            if data_url is None:
+                continue
+            text, usage, _ = mistral_vision_text(api_key, data_url)
+            cost += (usage.get("prompt_tokens", 0) * IN_MILLICENTS
+                     + usage.get("completion_tokens", 0) * OUT_MILLICENTS)
+            if text.strip():
+                chunks.append((number, text.strip()))
+        chunks.sort()
+
+    if not chunks:
+        raise ValueError(f"{name} : aucun texte extractible (scan sans image lisible ?)")
+    return "\n\n".join(f"— Page {n} —\n{t}" for n, t in chunks), cost
+
+
+def text_from_office(blob: bytes, name: str) -> str:
+    """
+    Texte d'un .pptx ou d'un .docx, avec la seule bibliothèque standard.
+
+    Ces formats sont des archives zip de XML. On n'a pas besoin d'un lecteur
+    complet : les notes ne veulent que les mots, et le diaporama du prof est le
+    document que l'étudiant a le plus souvent sous la main.
+    """
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(blob))
+    except zipfile.BadZipFile as exc:
+        raise ValueError(f"{name} n'est pas un fichier Office lisible") from exc
+
+    def runs(xml: str) -> list[str]:
+        # <a:t> pour PowerPoint, <w:t> pour Word — mêmes balises de texte brut.
+        found = re.findall(r"<(?:a|w):t[^>]*>(.*?)</(?:a|w):t>", xml, re.DOTALL)
+        out = []
+        for piece in found:
+            clean = re.sub(r"<[^>]+>", "", piece)
+            clean = html.unescape(clean).strip()
+            if clean:
+                out.append(clean)
+        return out
+
+    slides = [n for n in archive.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", n)]
+    if slides:
+        # Diapo 2 vient après la diapo 10 dans l'ordre alphabétique : on trie
+        # sur le numéro, sinon le plan du cours ressort mélangé.
+        numbered = sorted(
+            ((int(re.search(r"(\d+)", n.rsplit("/", 1)[-1]).group(1)), n) for n in slides),
+        )
+        blocks = []
+        # On garde le numéro du fichier, pas un compteur : c'est celui que
+        # l'étudiant verra en rouvrant le diaporama du prof, même si une
+        # diapositive a été supprimée entre-temps.
+        for number, entry in numbered:
+            lines = runs(archive.read(entry).decode("utf-8", "replace"))
+            if lines:
+                blocks.append(f"— Diapositive {number} —\n" + "\n".join(lines))
+        if not blocks:
+            raise ValueError(f"{name} ne contient aucun texte (diapositives en images ?)")
+        return "\n\n".join(blocks)
+
+    if "word/document.xml" in archive.namelist():
+        lines = runs(archive.read("word/document.xml").decode("utf-8", "replace"))
+        if not lines:
+            raise ValueError(f"{name} ne contient aucun texte")
+        return "\n".join(lines)
+
+    raise ValueError(f"{name} : format Office non reconnu (attendu .pptx ou .docx)")
 
 
 class StudioHandler(AsrHandler):
@@ -1074,8 +1727,16 @@ class StudioHandler(AsrHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
+    def _identity(self) -> dict | None:
+        header = self.headers.get("Authorization", "")
+        if header.startswith("Bearer "):
+            return identity_auth.authenticate(header[7:].strip())
+        return None
+
     def _authorized(self) -> bool:
-        """Authentification HTTP Basic. Comparaison à temps constant."""
+        """Bearer identity first, then temporary shared Basic migration auth."""
+        if self._identity():
+            return True
         if not AMPHI_PASSWORD:
             return True
         header = self.headers.get("Authorization", "")
@@ -1088,18 +1749,72 @@ class StudioHandler(AsrHandler):
         _, _, given = decoded.partition(":")
         return hmac.compare_digest(given, AMPHI_PASSWORD)
 
-    def _demand_auth(self) -> None:
-        body = b'{"error":"authentification requise"}'
-        self.send_response(401)
+    def _demand_auth(self, status: int = 401) -> None:
+        body = b'{"error":"authentification requise"}' if status == 401 else b'{"error":"droits insuffisants"}'
+        if status == 403:
+            self.send_response(403)
+        else:
+            self.send_response(401)
         self.send_header("WWW-Authenticate", f'Basic realm="{REALM}", charset="UTF-8"')
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
+    def _resource_allowed(self, owner: str | None, *, claim: bool = False) -> bool:
+        """Bearer identities may only access resources they own; legacy auth stays shared."""
+        actor = self._identity()
+        if not actor:
+            return True
+        user_id = str(actor.get("id") or "")
+        if owner and not hmac.compare_digest(str(owner), user_id):
+            return False
+        return True
+
+    def _resource_owner(self, payload: dict[str, Any]) -> str | None:
+        return payload.get("_ownerId") if isinstance(payload, dict) else None
+
+    def _deny_resource(self) -> None:
+        self._send(403, {"error": "accès refusé"})
+
     # ------------------------------------------------------------------ GET
 
     def do_GET(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        if parsed.path in ("/compatibility", "/api/compatibility"):
+            raw = (parse_qs(parsed.query).get("clientProtocol") or [""])[0]
+            try:
+                client_protocol = int(raw) if raw else None
+            except ValueError:
+                client_protocol = None
+            compatible = (client_protocol is None or
+                          client_protocol >= MIN_CLIENT_COMPATIBILITY_VERSION)
+            self._send(200, {
+                "compatible": compatible,
+                "serverVersion": SERVER_VERSION,
+                "protocolVersion": COMPATIBILITY_VERSION,
+                "minClientProtocolVersion": MIN_CLIENT_COMPATIBILITY_VERSION,
+                "clientProtocolVersion": client_protocol,
+            })
+            return
+        if parsed.path == "/health":
+            payload = {"ok": True, "service": "amphi-studio",
+                       "serverVersion": SERVER_VERSION,
+                       "protocolVersion": COMPATIBILITY_VERSION,
+                       **health_diagnostics()}
+            self._send(200, payload)
+            return
+        if urlparse(self.path).path == "/auth/admin/users":
+            actor = self._identity()
+            if not actor or actor.get("role") != "admin":
+                self._send(403, {"error": "droits administrateur requis"})
+            else:
+                self._send(200, {"users": identity_auth.list_users()})
+            return
+        if urlparse(self.path).path == "/auth/me":
+            user = self._identity()
+            self._send(200, {"user": user}) if user else self._send(401, {"error": "authentification requise"})
+            return
         # /health reste ouvert : c'est ce que la sonde du tunnel interroge.
         if self.path != "/health" and not self._authorized():
             self._demand_auth()
@@ -1126,14 +1841,20 @@ class StudioHandler(AsrHandler):
             if len(parts) != 2:
                 self._send(404, {"error": "chemin audio invalide"})
                 return
-            target = AUDIO_DIR / safe_id(parts[0]) / re.sub(r"[^0-9a-zA-Z.]", "", parts[1])
+            doc_id = safe_id(parts[0])
+            session = load_session(doc_id)
+            if not self._resource_allowed(self._resource_owner(session)):
+                self._deny_resource(); return
+            target = AUDIO_DIR / doc_id / re.sub(r"[^0-9a-zA-Z.]", "", parts[1])
             self._send_file(target, "audio/webm" if target.suffix == ".webm" else "audio/mp4",
                             cache="private, max-age=86400")
             return
         if self.path.startswith("/versions"):
-            from urllib.parse import parse_qs, urlparse
 
             doc_id = safe_id((parse_qs(urlparse(self.path).query).get("id") or [""])[0])
+            current = load_session(doc_id)
+            if not self._resource_allowed(self._resource_owner(current)):
+                self._deny_resource(); return
             folder = VERSIONS_DIR / doc_id
             out = []
             if folder.exists():
@@ -1158,23 +1879,43 @@ class StudioHandler(AsrHandler):
                             "audio/wav", cache="private, max-age=3600")
             return
         if self.path.startswith("/lexicon"):
-            from urllib.parse import parse_qs, urlparse
 
             course = (parse_qs(urlparse(self.path).query).get("course") or [""])[0]
             self._send(200, {"course": course, "terms": lexicon_for_course(course)})
             return
         if self.path.startswith("/search"):
-            from urllib.parse import parse_qs, urlparse
             q = (parse_qs(urlparse(self.path).query).get("q") or [""])[0]
             self._send(200, {"query": q, "results": search_documents(q)})
             return
         if self.path == "/docs":
             self._send(200, {"docs": list_documents()})
             return
+        if self.path.startswith("/sessions"):
+            q = parse_qs(urlparse(self.path).query)
+            on = (q.get("on") or [""])[0]          # YYYY-MM-DD, vide = tout
+            course = (q.get("course") or [""])[0]
+            self._send(200, {"sessions": list_sessions(on=on, course=course)})
+            return
+        if urlparse(self.path).path == "/schedule/me":
+            identity = self._identity()
+            if not identity:
+                self._demand_auth()
+                return
+            book = load_user_schedule(str(identity.get("id") or ""))
+            self._send(200, {"now": schedule_now_from_book(book), "book": list(book.values())})
+            return
+        if self.path.startswith("/schedule"):
+            q = parse_qs(urlparse(self.path).query)
+            at = (q.get("at") or [""])[0]
+            self._send(200, {"now": schedule_now(at), "book": list(load_schedule().values())})
+            return
         if self.path.startswith("/load"):
             doc_id = self.path.partition("?id=")[2] or "default"
             path = DATA_DIR / f"{re.sub(r'[^a-zA-Z0-9_-]', '', doc_id)}.json"
-            self._send(200, json.loads(path.read_text("utf-8")) if path.exists() else {"empty": True})
+            loaded = json.loads(path.read_text("utf-8")) if path.exists() else {"empty": True}
+            if not self._resource_allowed(self._resource_owner(loaded)):
+                self._deny_resource(); return
+            self._send(200, loaded)
             return
         super().do_GET()
 
@@ -1197,6 +1938,38 @@ class StudioHandler(AsrHandler):
     # ----------------------------------------------------------------- POST
 
     def do_POST(self) -> None:  # noqa: N802
+        route = urlparse(self.path).path
+        if route == "/auth/login":
+            try:
+                body = self._read_json()
+                result = identity_auth.login(str(body.get("username", "")), str(body.get("password", "")))
+                self._send(200, result) if result else self._send(401, {"error": "identifiants invalides"})
+            except Exception as exc:
+                self._send(400, {"error": str(exc)})
+            return
+        if route == "/auth/logout":
+            header = self.headers.get("Authorization", "")
+            if header.startswith("Bearer "): identity_auth.logout(header[7:].strip())
+            self._send(200, {"ok": True}); return
+        if route.startswith("/auth/admin/"):
+            actor = self._identity()
+            if not actor or actor.get("role") != "admin":
+                self._send(403, {"error": "droits administrateur requis"}); return
+            try:
+                body = self._read_json()
+                if route == "/auth/admin/invite":
+                    result = identity_auth.admin_invite(str(body.get("username", "")), str(body.get("displayName", "")), str(body.get("role", "contributor")))
+                    self._send(201, result)
+                elif route in {"/auth/admin/disable", "/auth/admin/enable"}:
+                    result = identity_auth.admin_set_disabled(str(body.get("userId", "")), route.endswith("disable"))
+                    self._send(200, {"user": result})
+                elif route == "/auth/admin/rotate":
+                    self._send(200, identity_auth.admin_rotate(str(body.get("userId", ""))))
+                elif route == "/auth/admin/revoke":
+                    self._send(200, {"revoked": identity_auth.admin_revoke(str(body.get("userId", "")))})
+                else: self._send(404, {"error": "route introuvable"})
+            except (ValueError, KeyError) as exc: self._send(400, {"error": str(exc)})
+            return
         if not self._authorized():
             self._demand_auth()
             return
@@ -1209,10 +1982,14 @@ class StudioHandler(AsrHandler):
             "/move": self.handle_move,
             "/audio": self.handle_audio,
             "/restore": self.handle_restore,
+            "/contribute": self.handle_contribute,
+            "/session-notes": self.handle_session_notes,
+            "/session-doc": self.handle_session_doc,
+            "/schedule/import": self.handle_schedule_import,
+            "/schedule/import/me": self.handle_user_schedule_import,
         }
         # `self.path` contient la chaîne de requête : /audio?id=… ne matchait
         # aucune route et repartait en 404 sans explication.
-        from urllib.parse import urlparse
 
         handler = routes.get(urlparse(self.path).path)
         if handler is None:
@@ -1256,8 +2033,20 @@ class StudioHandler(AsrHandler):
             self._send(200, {"kind": "text", "name": name, "text": text, "costEuros": "0,0000 €"})
             return
 
+        if kind == "pdf":
+            blob = decode_data_url(payload.get("dataUrl"))
+            text, cost = text_from_pdf(blob, name, self._api_key())
+            self._send(200, {"kind": "pdf", "name": name, "text": text,
+                             "costEuros": format_cost(cost)})
+            return
+
+        if kind == "office":
+            text = text_from_office(decode_data_url(payload.get("dataUrl")), name)
+            self._send(200, {"kind": "office", "name": name, "text": text, "costEuros": "0,0000 €"})
+            return
+
         if kind != "image":
-            raise ValueError("kind doit valoir 'image' ou 'text'")
+            raise ValueError("kind doit valoir 'image', 'pdf', 'office' ou 'text'")
 
         data_url = str(payload.get("dataUrl") or "")
         if not data_url.startswith("data:image/"):
@@ -1275,7 +2064,7 @@ class StudioHandler(AsrHandler):
                 "kind": "image",
                 "name": name,
                 "text": text,
-                "costEuros": f"{cost / 1000:.4f} €",
+                "costEuros": format_cost(cost),
                 "latencyMs": round(latency_ms),
                 "usage": usage,
             },
@@ -1288,7 +2077,7 @@ class StudioHandler(AsrHandler):
         segments = payload.get("segments") or []
         attachments = payload.get("attachments") or []
         enrich = bool(payload.get("enrich"))
-        lang_code, lang_rule = resolve_language(payload.get("language", "auto"), segments)
+        lang_code, lang_rule = resolve_language(payload.get("language", "auto"), segments, attachments)
         # §6.4 : une génération ne réécrit jamais ce qu'un humain a touché.
         keep = payload.get("keepEdited") or []
 
@@ -1297,8 +2086,8 @@ class StudioHandler(AsrHandler):
 
         # Les indices restent GLOBAUX : un bloc doit pouvoir citer [s412] même
         # si les segments 400 à 411 ont été écartés comme bruit.
-        usable = [(i, s) for i, s in enumerate(segments)
-                  if float(s.get("avgConfidence") or 0) >= MIN_SEGMENT_CONFIDENCE]
+        speech = speech_indices(segments)
+        usable = [(i, segments[i]) for i in speech]
         dropped = len(segments) - len(usable)
         if dropped:
             LOG.info("bruit écarté avant génération : %d segments sur %d", dropped, len(segments))
@@ -1307,6 +2096,15 @@ class StudioHandler(AsrHandler):
         if usable:
             parts.append("TRANSCRIPTION DE LA SÉANCE\n"
                          + "\n".join(f"[s{i}] {s['text']}" for i, s in usable))
+        if attachments and not usable:
+            # Sans transcription, la règle « ne rédige rien qui ne soit dit »
+            # n'a plus de référent : il faut la redire sur les documents, sinon
+            # le modèle se croit sans source et ne produit rien.
+            parts.append(
+                "PAS DE TRANSCRIPTION : la séance n'a pas été enregistrée. Les DOCUMENTS "
+                "ci-dessous sont l'unique source. Tire-en des notes complètes et cite-les "
+                "dans sourceAttachmentIds. N'invente rien qui n'y figure pas."
+            )
         if attachments:
             parts.append(
                 "DOCUMENTS FOURNIS — photos du tableau, diapositives, notes collées\n"
@@ -1325,8 +2123,9 @@ class StudioHandler(AsrHandler):
 
         if api_key != "":
             try:
-                if len(segments) > WINDOW_SEGMENTS:
-                    doc, usage, latency_ms = generate_windowed(api_key, segments, attachments, lang_rule)
+                if len(speech) > WINDOW_SEGMENTS:
+                    doc, usage, latency_ms = generate_windowed(
+                        api_key, segments, attachments, lang_rule, speech)
                 else:
                     doc, usage, latency_ms = mistral_chat(
                         api_key,
@@ -1338,12 +2137,9 @@ class StudioHandler(AsrHandler):
                     )
                 engine = MISTRAL_MODEL
             except urllib.error.HTTPError as exc:
-                detail = exc.read().decode("utf-8", "replace")[:200]
-                problems.append(
-                    "Mistral refuse l'inférence (429) : plan du compte inactif."
-                    if exc.code == 429
-                    else f"Mistral HTTP {exc.code} : {detail}"
-                )
+                problems.append(mistral_error_text(exc))
+            except ConnectionError as exc:
+                problems.append(str(exc))
         else:
             problems.append("MISTRAL_API_KEY absente.")
 
@@ -1447,15 +2243,41 @@ class StudioHandler(AsrHandler):
         if api_key == "":
             raise ValueError("MISTRAL_API_KEY absente : la génération de schémas en a besoin")
 
-        lang_rule = LANGUAGE_RULES.get(str(payload.get("language") or "fr")[:2], LANGUAGE_RULES["fr"])
+        lang_rule = LANGUAGE_RULES.get(str(payload.get("language") or "en")[:2], LANGUAGE_RULES["en"])
         prefix = f"{lang_rule} Les libellés du schéma doivent être dans cette langue.\n\n"
         user = prefix + (context if instruction == "" else f"Consigne : {instruction}\n\nPassage :\n{context}")
-        doc, usage, latency_ms = mistral_chat(
-            api_key,
-            [{"role": "system", "content": DIAGRAM_PROMPT}, {"role": "user", "content": user}],
-            max_tokens=1500,
-        )
+        messages = [{"role": "system", "content": DIAGRAM_PROMPT}, {"role": "user", "content": user}]
+        # Le navigateur peut renvoyer le diagramme et l'erreur du vrai parseur :
+        # c'est le signal le plus sûr qui soit, on le rend au modèle tel quel.
+        broken = str(payload.get("brokenMermaid") or "").strip()
+        if broken:
+            messages.append({"role": "assistant", "content": json.dumps({"mermaid": broken})})
+            messages.append({"role": "user", "content":
+                "Ce diagramme ne passe pas le parseur Mermaid : "
+                + str(payload.get("parserError") or "erreur inconnue")
+                + "\nRéécris-le en flowchart, même contenu, tous les libellés entre guillemets."})
+
+        doc, usage, latency_ms = mistral_chat(api_key, messages, max_tokens=1500)
         cost = usage.get("prompt_tokens", 0) * IN_MILLICENTS + usage.get("completion_tokens", 0) * OUT_MILLICENTS
+
+        # Une seule reprise : si le diagramme porte une faute qu'on sait fatale,
+        # on la donne au modèle plutôt que de livrer un schéma qui ne s'affichera pas.
+        problems = mermaid_problems(doc.get("mermaid", ""))
+        if problems and doc.get("mermaid", "").strip():
+            LOG.info("schéma refusé (%s) — nouvelle tentative", "; ".join(problems[:2]))
+            retry = messages + [
+                {"role": "assistant", "content": json.dumps(doc, ensure_ascii=False)},
+                {"role": "user", "content": "Ce diagramme ne peut pas être rendu : "
+                 + " ; ".join(problems[:4]) + ". Réécris-le en flowchart."},
+            ]
+            try:
+                fixed, u2, _ = mistral_chat(api_key, retry, max_tokens=1500)
+                if not mermaid_problems(fixed.get("mermaid", "")):
+                    doc = fixed
+                    cost += (u2.get("prompt_tokens", 0) * IN_MILLICENTS
+                             + u2.get("completion_tokens", 0) * OUT_MILLICENTS)
+            except Exception:  # noqa: BLE001 — on garde le premier résultat
+                LOG.exception("reprise du schéma")
         self._send(
             200,
             {
@@ -1477,7 +2299,6 @@ class StudioHandler(AsrHandler):
         horodatages restaient affichés en ne renvoyant nulle part, ce qui vidait
         de sens la traçabilité qui est le principe du produit.
         """
-        from urllib.parse import parse_qs, urlparse
 
         params = parse_qs(urlparse(self.path).query)
         doc_id = safe_id((params.get("id") or [""])[0])
@@ -1521,6 +2342,10 @@ class StudioHandler(AsrHandler):
         payload = self._read_json()
         doc_id = safe_id(payload.get("id"))
         path = DATA_DIR / f"{doc_id}.json"
+        if path.exists():
+            current = json.loads(path.read_text("utf-8"))
+            if not self._resource_allowed(self._resource_owner(current)):
+                self._deny_resource(); return
         path.unlink(missing_ok=True)
         # L'audio et l'historique partent avec la séance : garder des morceaux
         # d'une séance supprimée serait une surprise désagréable côté RGPD.
@@ -1546,11 +2371,242 @@ class StudioHandler(AsrHandler):
         temp.replace(current)
         self._send(200, {"ok": True, "restored": stamp})
 
+    def handle_contribute(self) -> None:
+        """
+        Ajoute la contribution d'un étudiant à une séance partagée, sous verrou,
+        sans écraser celle des autres. C'est le geste qui supprime les doublons :
+        tout le monde écrit dans la MÊME séance.
+        """
+        payload = self._read_json()
+        key = S.slugify(str(payload.get("sessionKey") or ""))
+        if not key or key == "cours":
+            raise ValueError("sessionKey manquant")
+        # Bearer-authenticated contributors cannot impersonate another name via JSON.
+        # Keep the payload fallback for the temporary Basic migration path.
+        identity = self._identity()
+        contributor = (identity or {}).get("displayName") if identity else str(payload.get("contributor") or "anonyme")
+        contributor = str(contributor or "anonyme")
+        kind = str(payload.get("kind") or "")
+        # Durable clients replay envelopes after reconnect; acknowledge a replay
+        # without applying it twice, independently of recording-id deduplication.
+        receipt_key = str(self.headers.get("Idempotency-Key") or payload.get("idempotencyKey") or "").strip()
+        with session_lock(key):
+            session = load_session(key)
+            if not self._resource_allowed(self._resource_owner(session)):
+                self._deny_resource(); return
+            if identity and not session.get("_ownerId"):
+                session["_ownerId"] = identity.get("id")
+            receipts = session.setdefault("_contributionReceipts", {})
+            if receipt_key and receipt_key in receipts:
+                summary = S.session_summary(session)
+                summary["consensus"] = session.get("consensus")
+                self._send(200, {"ok": True, "duplicate": True, "session": summary})
+                return
+            # Le cours, l'heure et le lieu viennent de l'agenda ICS déjà importé,
+            # retrouvés par la clé — l'étudiant n'a rien à ressaisir. Le payload
+            # peut aussi les porter (séance créée à la main, hors agenda).
+            if not session.get("schedule"):
+                session["schedule"] = payload.get("schedule") or load_schedule().get(key) or {}
+            session = S.merge_contribution(session, contributor, kind, payload.get("payload") or {})
+            if kind == "recording":
+                # Le cache canonique est dérivé ici, sous le même verrou que la
+                # contribution : aucun lecteur ne voit une fusion à moitié mise à jour.
+                S.refresh_consensus(session)
+            if receipt_key:
+                receipts[receipt_key] = datetime.now(timezone.utc).isoformat()
+                # Keep replay protection bounded per session.
+                for old_key in list(receipts)[:-256]:
+                    receipts.pop(old_key, None)
+            store_session(key, session)
+            summary = S.session_summary(session)
+            # Le client remplace immédiatement son union locale par le canon ROVER.
+            # On renvoie le cache dérivé (pas les audios ni les transcriptions brutes)
+            # afin que la réponse reste bornée et que tous voient le même texte.
+            summary["consensus"] = session.get("consensus")
+        self._send(200, {"ok": True, "session": summary})
+
+    def handle_session_notes(self) -> None:
+        """
+        Génère (ou régénère) l'unique document de la séance à partir de TOUT ce
+        qui a été mis en commun : les paroles de tous les enregistrements et les
+        pièces jointes de chacun. Un cours, un document — quelle que soit la
+        personne qui déclenche la génération.
+        """
+        payload = self._read_json()
+        key = S.slugify(str(payload.get("sessionKey") or ""))
+        with session_lock(key):
+            session = load_session(key)
+            consensus = S.consensus_result(session)
+            if session.get("consensus") is not consensus:
+                session["consensus"] = consensus
+                store_session(key, session)
+        segments = consensus["segments"]
+        attachments = [{"name": a["name"], "text": a["text"], "kind": a.get("kind")}
+                       for a in (session.get("attachments") or [])]
+        if not segments and not attachments:
+            raise ValueError("séance vide : aucun enregistrement ni document")
+        lang = (session.get("schedule") or {}).get("language") or payload.get("language", "auto")
+        lang_code, lang_rule = resolve_language(lang, segments, attachments)
+        speech = speech_indices(segments)
+        api_key = self._api_key()
+        if api_key == "":
+            raise ValueError("MISTRAL_API_KEY absente : génération impossible")
+        if len(speech) > WINDOW_SEGMENTS:
+            doc, usage, latency = generate_windowed(api_key, segments, attachments, lang_rule, speech)
+        else:
+            usable = [(i, segments[i]) for i in speech]
+            parts = []
+            if usable:
+                parts.append("TRANSCRIPTION DE LA SÉANCE\n"
+                             + "\n".join(f"[s{i}] {seg['text']}" for i, seg in usable))
+            if attachments:
+                parts.append("DOCUMENTS FOURNIS\n"
+                             + "\n\n".join(f"[a{i}] {a['name']}\n{a['text']}" for i, a in enumerate(attachments)))
+            doc, usage, latency = mistral_chat(api_key, [
+                {"role": "system", "content": SYSTEM_PROMPT.replace("{LANGUAGE_RULE}", lang_rule)},
+                {"role": "user", "content": "\n\n".join(parts)}], max_tokens=8000)
+        kept = []
+        for block in doc.get("blocks") or []:
+            if not isinstance(block, dict) or block.get("type") == "enrichment":
+                continue
+            fixed = coerce_block(block)
+            if fixed is None:
+                continue
+            anchor = verify_anchor(fixed, segments, attachments)
+            if anchor is None:
+                continue
+            fixed["anchor"] = anchor
+            kept.append(fixed)
+        document = {"title": doc.get("title", ""), "summary": doc.get("summary", ""),
+                    "blocks": drop_hollow_headings(kept), "glossary": doc.get("glossary") or [],
+                    "language": lang_code}
+        with session_lock(key):
+            session = load_session(key)
+            session["doc"] = document
+            store_session(key, session)
+        self._send(200, {"ok": True, "doc": document,
+                         "usedSegments": len(speech), "recordingCount": len(session.get("recordings") or []),
+                         "consensus": consensus.get("stats") or {}})
+
+    def handle_session_doc(self) -> None:
+        """
+        Enregistre le DOCUMENT d'une séance (retouches manuelles), sans toucher
+        aux enregistrements ni aux pièces jointes des autres. C'est le seul
+        écrit « note » sûr en multi-contributeur, en attendant le temps réel.
+        """
+        payload = self._read_json()
+        key = S.slugify(str(payload.get("sessionKey") or ""))
+        if not key or key == "cours":
+            raise ValueError("sessionKey manquant")
+        with session_lock(key):
+            session = load_session(key)
+            if not self._resource_allowed(self._resource_owner(session)):
+                self._deny_resource(); return
+            session["doc"] = payload.get("doc")
+            store_session(key, session)
+        self._send(200, {"ok": True})
+
+    def handle_schedule_import(self) -> None:
+        """
+        Ingère l'agenda ICS d'un étudiant (Centrale, emlyon). Les événements
+        deviennent des séances possibles, indexées par clé : les ICS de la promo
+        fusionnent, et « quel cours maintenant ? » sait répondre.
+        """
+        payload = self._read_json()
+        raw = payload.get("ics")
+        source = str(payload.get("source") or "")
+        if not raw and payload.get("url"):
+            try:
+                with urllib.request.urlopen(str(payload["url"]), timeout=20) as resp:
+                    raw = resp.read().decode("utf-8", "replace")
+            except Exception as exc:  # noqa: BLE001
+                raise ValueError(f"téléchargement de l'agenda impossible : {exc}") from exc
+        if not raw:
+            raise ValueError("ni ics ni url fourni")
+        book = S.schedule_from_ics(str(raw), source)
+        with session_lock("__schedule__"):
+            existing = load_schedule()
+            existing.update(book)
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            SCHEDULE_FILE.write_text(json.dumps(existing, ensure_ascii=False, indent=2), "utf-8")
+        self._send(200, {"ok": True, "added": len(book), "total": len(existing)})
+
+    def handle_user_schedule_import(self) -> None:
+        """Import already-parsed events into the caller's private calendar.
+
+        This endpoint deliberately accepts no ICS text or URL, avoiding server-side
+        fetching and ensuring one user's calendar cannot alter the shared book.
+        Replays are idempotent by stable event id (or derived session key).
+        """
+        identity = self._identity()
+        if not identity:
+            self._demand_auth()
+            return
+        payload = self._read_json()
+        events = payload.get("events")
+        if not isinstance(events, list) or len(events) > 2000:
+            raise ValueError("events doit être une liste (2000 maximum)")
+        if payload.get("url") is not None or payload.get("ics") is not None:
+            raise ValueError("URL/ICS interdits : envoyez uniquement les événements déjà analysés")
+        source = str(payload.get("source") or "")[:120]
+        imported: dict[str, dict[str, Any]] = {}
+        for event in events:
+            if not isinstance(event, dict):
+                raise ValueError("événement invalide")
+            course = str(event.get("course") or event.get("title") or "").strip()[:240]
+            start = str(event.get("start") or "").strip()
+            if not course or not start or event.get("url") or event.get("ics"):
+                raise ValueError("événement: course et start requis; URL/ICS interdits")
+            try:
+                dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError("start doit être une date ISO-8601") from exc
+            if dt.tzinfo is None:
+                raise ValueError("start doit inclure un fuseau")
+            # The session key is the canonical identity, not the feed UID. UIDs
+            # commonly change between exports/providers; using one as the map key
+            # made the same class appear twice after importing another feed.
+            session_id = S.session_key(course, dt)
+            key = session_id
+            if not key:
+                raise ValueError("événement: id manquant")
+            end_value = event.get("end")
+            end_iso = None
+            if end_value:
+                try:
+                    end_dt = datetime.fromisoformat(str(end_value).replace("Z", "+00:00"))
+                except ValueError as exc:
+                    raise ValueError("end doit être une date ISO-8601") from exc
+                if end_dt.tzinfo is None or end_dt <= dt:
+                    raise ValueError("end doit suivre start et inclure un fuseau")
+                end_iso = end_dt.astimezone(timezone.utc).isoformat()
+            imported[key] = {"eventId": key, "sessionKey": S.session_key(course, dt), "course": course,
+                             "title": course, "start": dt.astimezone(timezone.utc).isoformat(),
+                             "end": end_iso,
+                             "location": str(event.get("location") or "")[:240], "source": source}
+        user_id = str(identity.get("id") or "")
+        with session_lock("__schedule-user-" + user_id):
+            existing = load_user_schedule(user_id)
+            added = sum(1 for key in imported if key not in existing)
+            updated = len(imported) - added
+            existing.update(imported)
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            user_schedule_path(user_id).write_text(json.dumps(existing, ensure_ascii=False, indent=2), "utf-8")
+        self._send(200, {"ok": True, "added": added, "updated": updated, "total": len(existing)})
+
     def handle_save(self) -> None:
         payload = self._read_json()
         doc_id = safe_id(payload.get("id"))
+        actor = self._identity()
+        existing = DATA_DIR / f"{doc_id}.json"
+        if existing.exists():
+            current = json.loads(existing.read_text("utf-8"))
+            if not self._resource_allowed(self._resource_owner(current)):
+                self._deny_resource(); return
+        if actor:
+            payload["_ownerId"] = actor.get("id")
         DATA_DIR.mkdir(parents=True, exist_ok=True)
-        path = DATA_DIR / f"{doc_id}.json"
+        path = existing
         # Archive de l'état précédent AVANT d'écrire : régénérer des notes
         # remplaçait tout sans filet, et une mauvaise génération effaçait une
         # heure de cours sans possibilité de revenir en arrière.
@@ -1583,10 +2639,10 @@ def load_dotenv() -> None:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s")
     load_dotenv()
+    identity_auth.seed_admin_from_env()
     port = int(os.environ.get("PORT", "8765"))
-    # 127.0.0.1 par défaut : le studio n'a AUCUNE authentification. L'ouvrir sur
-    # le réseau, c'est offrir la lecture et la suppression de toutes les notes à
-    # quiconque partage le wifi. Réservé au partage ponctuel entre camarades.
+    # 127.0.0.1 par défaut. Une écoute réseau n'est autorisée que si
+    # AMPHI_PASSWORD est défini ; le tunnel Cloudflare reste l'accès public prévu.
     host = os.environ.get("AMPHI_HOST", "127.0.0.1")
 
     global AMPHI_PASSWORD
@@ -1631,9 +2687,8 @@ def main() -> None:
             lan = host
         finally:
             probe.close()
-        LOG.warning("Ouvert sur le réseau → http://%s:%d", lan, port)
-        LOG.warning("AUCUNE authentification : n'importe qui sur ce réseau peut lire "
-                    "et supprimer toutes les notes. À couper après usage.")
+        LOG.warning("Ouvert sur le réseau → http://%s:%d (authentification activée)",
+                    lan, port)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

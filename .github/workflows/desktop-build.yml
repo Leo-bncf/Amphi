@@ -1,0 +1,42 @@
+name: Desktop bundles
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version '^2' --locked
+      - name: Build macOS bundle
+        working-directory: apps/desktop/src-tauri
+        run: cargo tauri build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: amphi-macos
+          path: apps/desktop/src-tauri/target/release/bundle/**
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version ^2 --locked
+      - name: Build Windows bundle
+        working-directory: apps/desktop/src-tauri
+        run: cargo tauri build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: amphi-windows
+          path: apps/desktop/src-tauri/target/release/bundle/**

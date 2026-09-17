@@ -2,6 +2,8 @@ node_modules/
 dist/
 .next/
 .turbo/
+apps/desktop/src-tauri/target/
+apps/desktop/dist-app/
 *.tsbuildinfo
 
 # secrets

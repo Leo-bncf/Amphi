@@ -8,6 +8,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod whisper;
+mod queue;
 
 use base64::Engine;
 use serde::Serialize;
@@ -58,6 +59,37 @@ async fn download_model(app: tauri::AppHandle) -> Result<(), String> {
 /// Le navigateur décode lui-même l'enregistrement avec `AudioContext` : c'est
 /// gratuit, déjà présent, et ça évite d'embarquer ffmpeg dans l'application.
 #[tauri::command]
+fn queue_contribution(endpoint: String, payload: serde_json::Value, audio_path: Option<String>, audio_endpoint: Option<String>) -> Result<queue::Envelope, String> {
+    queue::enqueue(endpoint, payload, audio_path, audio_endpoint)
+}
+
+/// Stores an audio blob in the app data directory before any network work.
+#[tauri::command]
+fn stage_audio(blob_base64: String, extension: Option<String>) -> Result<String, String> {
+    let bytes = base64::engine::general_purpose::STANDARD.decode(blob_base64.as_bytes()).map_err(|e| e.to_string())?;
+    let home = std::env::var_os("HOME").ok_or("HOME absent")?;
+    let dir = std::path::PathBuf::from(home).join(if cfg!(target_os = "macos") { "Library/Application Support/Amphi/staged-audio" } else { ".local/share/amphi/staged-audio" });
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let ext = extension.unwrap_or_else(|| "webm".into()).replace(|c: char| !c.is_ascii_alphanumeric(), "");
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos();
+    let path = dir.join(format!("{stamp:x}.{ext}"));
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn flush_contribution_queue(token: Option<String>, auth: Option<String>) -> Result<usize, String> {
+    queue::flush(token.as_deref(), auth.as_deref())
+}
+
+#[tauri::command]
+fn acknowledge_contribution(idempotency_key: String) -> Result<(), String> {
+    queue::acknowledge(idempotency_key)
+}
+
+#[tauri::command]
 async fn transcribe_native(
     pcm_base64: String,
     language: Option<String>,
@@ -82,21 +114,44 @@ async fn transcribe_native(
 
 /// Adresse du serveur de la promo.
 ///
-/// Lue dans `~/Library/Application Support/Amphi/server.txt` (ou l'équivalent
-/// selon la plateforme), sinon la variable d'environnement, sinon le serveur
-/// local. Un fichier plutôt qu'une valeur compilée : chaque étudiant pointe la
-/// carte sans qu'on lui recompile une application.
-/// Mot de passe partagé du serveur, lu à côté de l'adresse.
+/// Environment variables are intentionally explicit development overrides. On
+/// macOS, production credentials come from the user's Keychain rather than a
+/// plaintext file. Other platforms fail closed (empty credential) unless the
+/// developer supplied an environment override.
+fn credential_from_keychain(account: &str) -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        let output = std::process::Command::new("/usr/bin/security")
+            .args(["find-generic-password", "-s", "Amphi", "-a", account, "-w"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let value = String::from_utf8(output.stdout).ok()?.trim().to_string();
+        (!value.is_empty()).then_some(value)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = account;
+        None
+    }
+}
+
+fn server_token() -> String {
+    if let Ok(v) = std::env::var("AMPHI_TOKEN") {
+        if !v.trim().is_empty() { return v.trim().to_string(); }
+    }
+    credential_from_keychain("server-token").unwrap_or_default()
+}
+
 fn server_password() -> String {
     if let Ok(v) = std::env::var("AMPHI_PASSWORD") {
         if !v.trim().is_empty() {
             return v.trim().to_string();
         }
     }
-    dirs_config()
-        .and_then(|d| std::fs::read_to_string(d.join("password.txt")).ok())
-        .map(|t| t.trim().to_string())
-        .unwrap_or_default()
+    credential_from_keychain("server-password").unwrap_or_default()
 }
 
 fn server_url() -> String {
@@ -133,9 +188,11 @@ fn main() {
     // Injecté avant tout script de la page : l'interface lit `AMPHI_API` au
     // chargement pour savoir où adresser ses requêtes.
     let password = server_password();
+    let token = server_token();
     let bootstrap = format!(
-        "globalThis.AMPHI_API = {}; globalThis.AMPHI_AUTH = {};",
+        "globalThis.AMPHI_API = {}; globalThis.AMPHI_TOKEN = {}; globalThis.AMPHI_AUTH = {};",
         serde_json::to_string(&api).unwrap(),
+        serde_json::to_string(&token).unwrap(),
         serde_json::to_string(&password).unwrap()
     );
 
@@ -146,7 +203,7 @@ fn main() {
             println!("Amphi — mot de passe : {}", if password.is_empty() { "aucun" } else { "configuré" });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![host_info, download_model, transcribe_native])
+        .invoke_handler(tauri::generate_handler![host_info, download_model, transcribe_native, queue_contribution, stage_audio, flush_contribution_queue, acknowledge_contribution])
         .run(tauri::generate_context!())
         .expect("démarrage de la fenêtre Amphi");
 }

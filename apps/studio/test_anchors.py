@@ -19,7 +19,7 @@ STUDIO = Path(__file__).parent
 sys.path.insert(0, str(STUDIO))
 sys.path.insert(0, str(STUDIO.parent / "mac-worker"))
 
-from server import verify_anchor  # noqa: E402
+from server import speech_indices, verify_anchor  # noqa: E402
 
 SEGMENTS = [
     {"text": "Passons maintenant au lasso, la régularisation L1.", "startMs": 1000, "endMs": 4000},
@@ -121,6 +121,45 @@ check(
      "sourceAttachmentIds": ["a42"]},
     expect_kept=False,
 )
+
+# Régression : le dictionnaire de détection de langue s'était appelé STOPWORDS
+# lui aussi et écrasait celui-ci. content_words cessait alors de filtrer les
+# mots creux, et deux textes sans rapport se « recouvraient » sur « cette »,
+# « dans », « avec ». La vérification d'ancrage perdait tout son sens.
+from server import STOPWORDS, content_words, locate_in_attachments  # noqa: E402
+
+if not isinstance(STOPWORDS, set):
+    FAILURES.append(f"STOPWORDS doit rester un ensemble, pas {type(STOPWORDS).__name__}")
+creux = content_words("Cette notion est plus dans le cours avec des exemples")
+if creux != {"notion", "cours", "exemples"}:
+    FAILURES.append(f"mots creux mal filtrés : {sorted(creux)}")
+
+check(
+    "recouvrement uniquement sur des mots creux",
+    {"type": "paragraph",
+     "text": "Cette approche est plus dans cette logique avec ces contraintes budgetaires.",
+     "sourceSegmentIds": ["s0"]},
+    expect_kept=False,
+)
+
+# Un bloc tiré d'une photo doit retrouver sa pièce jointe tout seul : en
+# génération fenêtrée le modèle ne cite presque jamais ses sources.
+PHOTO = [{"name": "tableau.jpg", "kind": "image",
+          "text": "Gradient boosting update rule, nu is the shrinkage parameter"}]
+if locate_in_attachments({"type": "paragraph",
+                          "text": "The shrinkage parameter scales each tree contribution."}, PHOTO) != ["a0"]:
+    FAILURES.append("bloc issu d'une photo non rattaché à sa pièce jointe")
+if locate_in_attachments({"type": "paragraph",
+                          "text": "Le chat dort sur le canape du salon."}, PHOTO):
+    FAILURES.append("bloc hors sujet rattaché à tort à une pièce jointe")
+
+# Une transcription d'une ancienne version ou importée peut ne pas porter de
+# score. L'absence de mesure ne doit pas être interprétée comme une confiance
+# nulle : sinon la génération partagée ignore silencieusement tout cet audio.
+if speech_indices([{"text": "Ridge regression reduces variance by shrinking coefficients."}]) != [0]:
+    FAILURES.append("segment sans avgConfidence écarté comme s'il avait une confiance nulle")
+if speech_indices([{"text": "bruit indistinct", "avgConfidence": 0.05}]):
+    FAILURES.append("segment explicitement peu fiable conservé")
 
 # Les bornes doivent couvrir tous les segments cités : c'est ce qui permet au
 # clic sur l'ancre de tomber au bon endroit dans l'audio.

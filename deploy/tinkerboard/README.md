@@ -62,19 +62,21 @@ curl -s localhost:8765/health
 
 ## Accès
 
-**Tailscale d'abord** — la ligne est en CGNAT, aucun port-forwarding n'est
-possible, et le service n'a pas d'authentification.
+**Cloudflare Tunnel** est l'accès public prévu — la ligne est en CGNAT,
+aucun port-forwarding n'est possible. Le serveur exige `AMPHI_PASSWORD` pour
+la compatibilité historique et prend en charge les comptes bearer individuels.
+Le port local reste lié à `127.0.0.1` : il ne doit jamais être exposé directement.
 
 ```bash
 curl -fsSL https://tailscale.com/install.sh | sh
 tailscale up
 ```
 
-Chaque camarade installe Tailscale et rejoint le tailnet : l'accès est alors
-chiffré et limité aux appareils autorisés, ce qui remplace l'authentification
-absente.
+Tailscale reste disponible pour l'administration privée et le dépannage :
+chaque camarade autorisé peut rejoindre le tailnet, mais l'accès normal de
+l'application passe par le tunnel Cloudflare authentifié.
 
-**Tunnel Cloudflare ensuite**, quand l'authentification existera :
+**Tunnel Cloudflare** :
 
 ```bash
 # cloudflared en armhf 32 bits
@@ -85,13 +87,16 @@ cloudflared tunnel login
 cloudflared tunnel create amphi
 ```
 
-## Ce qui bloque encore
+## Sécurité opérationnelle
 
-Le service **n'a aucune authentification**. Quiconque atteint l'URL peut lire
-et supprimer toutes les notes. Tant que ce n'est pas fait :
+L'accès public passe par Cloudflare Tunnel et l'API vérifie l'authentification.
+Les clients récents utilisent des comptes individuels et des jetons bearer ;
+`AMPHI_PASSWORD` reste la voie de migration pour les anciens clients.
 
-- accès par Tailscale uniquement, jamais par tunnel public ;
-- `AMPHI_HOST=127.0.0.1` dans `/etc/amphi.env`.
+- ne jamais exposer directement le port 8765 ;
+- conserver `AMPHI_HOST=127.0.0.1` dans `/etc/amphi.env` ;
+- garder `/etc/amphi.env` en mode 600 ;
+- réserver Tailscale à l'administration et au dépannage.
 
 ## Sauvegardes
 
