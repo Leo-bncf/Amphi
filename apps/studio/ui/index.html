@@ -719,7 +719,8 @@ if (API) {
 // dessin « Syntax error in text — mermaid version 11.17.2 » avant de lever son
 // erreur. On se retrouvait avec ce pavé d'erreur en plus de notre message, et
 // il survivait au retrait de la carte.
-mermaid.initialize({ startOnLoad: false, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "neutral",
+// Une dépendance de rendu absente ne doit pas bloquer la connexion et les séances.
+if (mermaid) mermaid.initialize({ startOnLoad: false, theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "neutral",
                      securityLevel: "strict", suppressErrorRendering: true });
 
 /** Message d'erreur du parseur Mermaid, ou null si le code est valide.
