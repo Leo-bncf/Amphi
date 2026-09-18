@@ -1236,14 +1236,11 @@ const ME_KEY = "amphi.me";
  *  contributions — « l'audio de Léa », « la photo de Léo ». */
 async function ensureContributor() {
   if (state.contributor) return state.contributor;
-  let me = null;
-  try { me = localStorage.getItem(ME_KEY); } catch { /* navigation privée */ }
-  if (!me) {
-    me = await askText("Ton nom", "Pour attribuer tes contributions à la séance partagée. Ton prénom suffit.",
-                       { placeholder: "Léo" });
-    me = (me || "").trim();
-    if (me) { try { localStorage.setItem(ME_KEY, me); } catch { /* ignore */ } }
-  }
+  let me = "";
+  try { me = (localStorage.getItem(ME_KEY) || "").trim(); } catch { /* navigation privée */ }
+  // L'identité authentifiée est désormais la source de vérité côté serveur.
+  // Ne bloque pas l'ouverture d'une séance avec une seconde fenêtre : l'ancien
+  // prompt donnait l'impression que le bouton Nouvelle séance ne répondait pas.
   state.contributor = me || "anonyme";
   return state.contributor;
 }
