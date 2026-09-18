@@ -20,7 +20,10 @@ jobs:
         shell: bash
         run: |
           mkdir -p apps/desktop/dist
-          cp apps/studio/ui/index.html apps/desktop/dist/index.html
+          cp -R apps/studio/ui/. apps/desktop/dist/
+          test -s apps/desktop/dist/vendor/mermaid.min.js
+          test -s apps/desktop/dist/vendor/katex/katex.min.js
+          test -s apps/desktop/dist/vendor/fonts/fonts.css
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version '^2' --locked
       - name: Build macOS bundle
