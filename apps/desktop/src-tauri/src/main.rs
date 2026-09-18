@@ -26,6 +26,14 @@ struct HostInfo {
 }
 
 #[tauri::command]
+fn fetch_ical(url: String) -> Result<String, String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) { return Err("URL iCal non sécurisée".to_string()); }
+    ureq::get(&url).timeout(std::time::Duration::from_secs(20)).call()
+        .map_err(|e| format!("récupération iCal impossible: {e}"))?
+        .into_string().map_err(|e| format!("réponse iCal illisible: {e}"))
+}
+
+#[tauri::command]
 fn host_info() -> HostInfo {
     let model = whisper::model_state();
     HostInfo {
@@ -203,7 +211,7 @@ fn main() {
             println!("Amphi — mot de passe : {}", if password.is_empty() { "aucun" } else { "configuré" });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![host_info, download_model, transcribe_native, queue_contribution, stage_audio, flush_contribution_queue, acknowledge_contribution])
+        .invoke_handler(tauri::generate_handler![host_info, fetch_ical, download_model, transcribe_native, queue_contribution, stage_audio, flush_contribution_queue, acknowledge_contribution])
         .run(tauri::generate_context!())
         .expect("démarrage de la fenêtre Amphi");
 }
