@@ -1407,13 +1407,20 @@ function parseIcsEvents(text) {
 
 async function openNew() {
   await ensureContributor();
-  // Ce que l'agenda et la promo proposent, en parallèle.
-  const [sched, opened] = await Promise.all([
+  // Ce que l'agenda, la promo et votre agenda privé proposent, en parallèle.
+  const [schedResult, openedResult, privateResult] = await Promise.all([
     fetch(api("/schedule?at=" + new Date().toISOString())).then((r) => r.json()).catch(() => ({ now: [] })),
     fetch(api("/sessions?on=" + todayISO())).then((r) => r.json()).catch(() => ({ sessions: [] })),
+    fetch(api("/schedule/me")).then((r) => r.json()).catch(() => ({ now: [] }))
   ]);
-  const now = sched.now ?? [];
-  const openKeys = new Set((opened.sessions ?? []).map((s) => s.sessionKey));
+  const nowShared = schedResult.now ?? [];
+  const nowPrivate = privateResult.now ?? [];
+  const nowMap = new Map();
+  for (const e of [...nowShared, ...nowPrivate]) {
+    if (e.sessionKey) nowMap.set(e.sessionKey, e);
+  }
+  const now = Array.from(nowMap.values());
+  const openKeys = new Set((openedResult.sessions ?? []).map((s) => s.sessionKey));
 
   const rowNow = (e) => `<button class="joinrow" data-k="${esc(e.sessionKey)}" data-src="sched">
       <span class="jt">${esc(e.course)}</span>
@@ -1424,7 +1431,7 @@ async function openNew() {
       <span class="jm">${s.contributors?.length || 0} contributeur(s) · ${s.recordingCount || 0} audio · ${s.attachmentCount || 0} doc</span>
       <span class="jgo">Rejoindre</span></button>`;
   // Les séances déjà listées « en ce moment » ne sont pas répétées plus bas.
-  const others = (opened.sessions ?? []).filter((s) => !now.some((e) => e.sessionKey === s.sessionKey));
+  const others = (openedResult.sessions ?? []).filter((s) => !now.some((e) => e.sessionKey === s.sessionKey));
 
   const back = document.createElement("div"); back.className = "modal";
   back.innerHTML = `<div class="sheetlet wide">
@@ -1480,9 +1487,14 @@ function openManual() {
   back.querySelector("#nOk").onclick = async () => {
     const course = cIn.value.trim() || "Séance";
     const key = keyFor(course);
-    await joinSession(key, { course, title: back.querySelector("#nT").value.trim() || course,
-                             start: new Date().toISOString() });
-    close(); enterSession();
+    try {
+        await joinSession(key, { course, title: back.querySelector("#nT").value.trim() || course,
+                                 start: new Date().toISOString() });
+        close(); enterSession();
+    } catch (e) {
+        console.error("Failed to create session:", e);
+        await ask("Erreur", `Impossible de créer la séance : ${e}`, "OK");
+    }
   };
   back.addEventListener("keydown", (e) => { if (e.key === "Enter") back.querySelector("#nOk").click(); });
 }

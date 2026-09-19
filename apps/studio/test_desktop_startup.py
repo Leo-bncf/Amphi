@@ -61,6 +61,7 @@ async def check(browser, bundle, missing_vendor=False):
 
     await page.route("**/*", serve)
     await page.goto("http://desktop.test/")
+    await page.wait_for_selector("#engine", state="visible")
     await page.locator("#engine").click()
     await page.locator("#loginUser").fill("test")
     await page.locator("#loginPass").fill("synthetic-test-password")
